@@ -1,14 +1,16 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { CalendarDays } from "lucide-react";
 import { useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
+import { NativeSelect } from "../../components/ui/native-select";
 import { addDays, compare, moveTurn, preferred, type Result } from "../../domain/water-balance/model";
 import { DraftForm, DraftHeader, Field } from "../pilot/draft-form";
 import { getReferenceCase } from "../territory/reference";
-import { decimal, type PilotDraft } from "../pilot/draft";
+import { decimal, productionPriorities, type PilotDraft, type ProductionPriority } from "../pilot/draft";
 import { assessDraft, cropProfiles, demoInterval, demoVolume, metadata, prepareScenario, scenarioSources, smapRows } from "./scenario";
 import { FadeContent } from "./fade-content";
 
@@ -16,13 +18,14 @@ const BalanceChart = dynamic(() => import("./balance-chart"), { ssr: false });
 const statusLabels = { viable: "Viable en el modelo", conditional: "Condicionada", indeterminate: "Indeterminada" };
 const format = new Intl.NumberFormat("es-BO", { maximumFractionDigits: 1 });
 const dateLabel = (date: string) => date.split("-").reverse().join("/");
+const stressDaysLabel = (days: number) => days + (days === 1 ? " día de estrés" : " días de estrés");
 const signed = (value: number, unit = "") => Math.abs(value) < 0.05 ? "sin cambio" : (value > 0 ? "+" : "−") + format.format(Math.abs(value)) + unit;
 type Scenario = NonNullable<ReturnType<typeof prepareScenario>>;
 
 export function Comparison() {
   return (
     <div className="py-8 sm:py-10">
-      <DraftHeader active="compare" title="Comparar tres rotaciones" description="Mueve el mismo turno y revisa cómo cambia el agua disponible para cada secuencia." />
+      <DraftHeader title="¿Qué siembro después?" description="Compara tres rotaciones y revisa cómo cambia el agua disponible si se retrasa el mismo turno." />
       <DraftForm>{(draft) => <ComparisonContent draft={draft} />}</DraftForm>
     </div>
   );
@@ -33,14 +36,15 @@ function ComparisonContent({ draft }: { draft?: PilotDraft }) {
   const [demo, setDemo] = useState(!draft?.parcel || reference === "la-maica" && assessDraft(draft).gaps.length > 0);
   const [delay, setDelay] = useState<0 | 5>(0);
   const [volume, setVolume] = useState(String(demoVolume));
+  const [priority, setPriority] = useState<ProductionPriority>(productionPriorities[0]);
   const [active, setActive] = useState("A");
   const assessment = assessDraft(draft);
-  const scenario = prepareScenario(draft, demo, decimal(volume));
+  const scenario = prepareScenario(draft, demo, decimal(volume), priority);
   const results = scenario ? [compare(scenario.input, 0), compare(scenario.input, 5)] as const : null;
 
   return (
     <>
-      <div className="mb-7 flex flex-wrap items-center gap-3" aria-label="Datos de la comparación">
+      <div className="mb-5 flex flex-wrap items-center gap-2" role="group" aria-label="Datos de la comparación">
         <Button aria-pressed={!demo} variant={demo ? "secondary" : "default"} onClick={() => setDemo(false)}>Mi parcela</Button>
         <Button aria-pressed={demo} variant={demo ? "default" : "secondary"} onClick={() => setDemo(true)}>Demo La Maica</Button>
       </div>
@@ -59,9 +63,17 @@ function ComparisonContent({ draft }: { draft?: PilotDraft }) {
         <AlertTitle>La Maica · parcela ilustrativa</AlertTitle>
         <AlertDescription>El clima y el suelo se tomaron de datos regionales. El calendario, la superficie y el riego representan un escenario reproducible.</AlertDescription>
       </Alert>}
-      {demo && <div className="mb-6 max-w-xs">
-        <Field label="Volumen del turno (m³, supuesto)"><Input value={volume} inputMode="decimal" onChange={(event) => setVolume(event.target.value)} /></Field>
-        {!scenario && <p role="alert" className="mt-2 text-sm text-red-800">Ingresa un volumen mayor que cero.</p>}
+      {demo && <div className="mb-5 grid max-w-2xl gap-3 sm:grid-cols-2">
+        <div>
+          <label htmlFor="demo-priority" className="mb-1.5 block text-sm font-semibold">Mi prioridad en la demo</label>
+          <NativeSelect id="demo-priority" value={priority} onChange={(event) => setPriority(event.target.value as ProductionPriority)}>
+            {productionPriorities.map((option) => <option key={option}>{option}</option>)}
+          </NativeSelect>
+        </div>
+        <div>
+          <Field label="Volumen del turno (m³, supuesto)"><Input value={volume} inputMode="decimal" onChange={(event) => setVolume(event.target.value)} /></Field>
+          {!scenario && <p role="alert" className="mt-2 text-sm text-red-800">Ingresa un volumen mayor que cero.</p>}
+        </div>
       </div>}
       {scenario && results && <Matrix scenario={scenario} results={results} delay={delay} setDelay={setDelay} active={active} setActive={setActive} use={demo ? "" : assessment.crop?.harvestUse} />}
     </>
@@ -83,7 +95,7 @@ function Matrix({ scenario, results: [planned, late], delay, setDelay, active, s
   let explanation = "No hay una preferencia defendible con los datos y restricciones del caso.";
   if (before && after && !changed) {
     const delta = after.stressDays! - before.stressDays!;
-    explanation = "Se mantiene la opción " + after.rotation.id + ". El retraso deja " + after.stressDays + " días de estrés: " +
+    explanation = "Se mantiene la opción " + after.rotation.id + ". El retraso deja " + stressDaysLabel(after.stressDays!) + ": " +
       (delta === 0 ? "sin cambio frente al turno previsto." : signed(delta) + " frente al turno previsto.");
   } else if (before && after) {
     const previous = late.find((item) => item.rotation.id === before.rotation.id)!;
@@ -95,24 +107,24 @@ function Matrix({ scenario, results: [planned, late], delay, setDelay, active, s
 
   return (
     <>
-      <fieldset className="mb-6 border-y border-line py-5">
-        <legend className="pr-3 text-sm font-semibold">Fecha del turno de la segunda campaña</legend>
-        <div className="flex flex-wrap gap-2">
-          <Button aria-pressed={delay === 0} variant={delay === 0 ? "default" : "secondary"} onClick={() => setDelay(0)}>Turno previsto</Button>
-          <Button aria-pressed={delay === 5} variant={delay === 5 ? "default" : "secondary"} onClick={() => setDelay(5)}>5 días más tarde</Button>
+      <section className="panel mb-4" aria-labelledby="turn-scenario">
+        <h2 id="turn-scenario" className="mb-3 flex items-center gap-2 text-base font-bold"><CalendarDays size={20} aria-hidden="true" /> Turno de la segunda campaña</h2>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Fecha de riego">
+          <Button aria-pressed={delay === 0} variant="secondary" className="aria-pressed:border-action aria-pressed:bg-leaf" onClick={() => setDelay(0)}>Turno previsto</Button>
+          <Button aria-pressed={delay === 5} variant="secondary" className="aria-pressed:border-action aria-pressed:bg-leaf" onClick={() => setDelay(5)}>5 días más tarde</Button>
         </div>
         <p className="mt-3 text-sm text-muted">Se aplica el <strong data-testid="selected-turn">{dateLabel(target.date)}</strong> · {format.format(scenario.volume)} m³ · {scenario.volumeSource}. Se mantienen el calendario y los otros turnos.</p>
-      </fieldset>
-      <div aria-live="polite" className="mb-7 border-l-3 border-action bg-action/5 px-5 py-4">
-        <FadeContent revision={String(delay)}>
+      </section>
+      <div aria-live="polite" className="mb-7 rounded-xl bg-leaf/75 px-4 py-4 sm:px-5">
+        <FadeContent revision={`${delay}:${scenario.input.priority}`}>
           <p className="font-semibold">{explanation}</p>
           <p className="mt-2 text-sm text-muted">Prioridad evaluada: {scenario.input.priority}. Preferencia del modelo bajo estos supuestos.</p>
         </FadeContent>
       </div>
       <section aria-labelledby="matrix-title">
-        <h2 id="matrix-title" className="mb-2 font-display text-4xl">Matriz de decisión</h2>
+        <h2 id="matrix-title" className="mb-2 text-2xl font-bold">Matriz de decisión</h2>
         <p className="mb-3 text-sm text-muted">Periodo común {dateLabel(scenario.input.days[0].date)} a {dateLabel(scenario.input.days.at(-1)!.date)}. Los cambios se indican frente al turno previsto.</p>
-        <div className="grid gap-5 lg:grid-cols-3">
+        <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr))]">
           {current.map((result, index) => <RotationPanel key={result.rotation.id} result={result} planned={planned[index]} delay={delay}
             preferredId={(delay ? after : before)?.rotation.id} active={selected.rotation.id} onSelect={setActive} />)}
         </div>
@@ -145,6 +157,7 @@ function RotationPanel({ result, planned, delay, preferredId, active, onSelect }
   result: Result; planned: Result; delay: number; preferredId?: string; active: string; onSelect: (id: string) => void;
 }) {
   const { rotation, status, firstStress } = result;
+  const recommended = rotation.id === preferredId;
   const crops = rotation.seasons.map(({ crop }) => crop.name);
   const profile = cropProfiles[crops.at(-1)!];
   const newStress = delay ? result.series.find((day, index) => day.stressed && planned.series[index]?.stressed === false) : undefined;
@@ -157,9 +170,10 @@ function RotationPanel({ result, planned, delay, preferredId, active, onSelect }
     ["Prioridad", result.compatible ? "Compatible" : "Requiere confirmar destino"],
   ];
   return (
-    <article className="min-w-0 border-t-3 border-action bg-white/35 px-4 py-4 sm:px-5" aria-label={"Opción " + rotation.id}>
-      <p className="text-sm font-semibold text-muted">Opción {rotation.id}{rotation.id === preferredId ? " · Preferida" : ""}</p>
-      <h3 className="mt-2 font-display text-3xl">{crops[0]} → {crops[1]}</h3>
+    <article className="panel rotation-option motion-safe:transition-colors" data-preferred={recommended} aria-label={"Opción " + rotation.id}>
+      <p className="text-sm font-semibold text-muted">Opción {rotation.id}{recommended ? " · Preferida" : ""}</p>
+      <h3 className="mt-2 text-xl font-bold">{crops[1]}</h3>
+      <p className="text-sm text-muted">Después de {crops[0].toLowerCase()}</p>
       <p className="mt-2 text-sm font-semibold">{statusLabels[status]}</p>
       <p className="mt-3 text-sm text-muted">Siembras: {rotation.seasons.map(({start}) => dateLabel(start)).join(" y ")}.</p>
       <dl className="my-3 text-sm">{metrics.map(([key, value]) => <div key={key} className="border-t border-line/70 py-2"><dt className="text-muted">{key}</dt><dd className="font-semibold">{value}</dd></div>)}</dl>

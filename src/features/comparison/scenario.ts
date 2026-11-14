@@ -1,6 +1,6 @@
 import sourceJson from "../../data/la-maica-sources.json";
 import { addDays, dayDistance, et0, flowVolume, millimeters, type BalanceInput, type Crop, type SoilLayer, type Turn, type Weather } from "../../domain/water-balance/model";
-import { cropForParcel, type CropWater, type PilotDraft } from "../pilot/draft";
+import { cropForParcel, productionPriorities, type CropWater, type PilotDraft, type ProductionPriority } from "../pilot/draft";
 import { getReferenceCase } from "../territory/reference";
 
 const sources = sourceJson as {
@@ -81,7 +81,7 @@ export function assessDraft(draft: PilotDraft | undefined) {
   return { zone, gaps, crop };
 }
 
-export function prepareScenario(draft: PilotDraft | undefined, demo: boolean, assumedVolume?: number): Scenario | null {
+export function prepareScenario(draft: PilotDraft | undefined, demo: boolean, assumedVolume?: number, demoPriority: ProductionPriority = productionPriorities[0]): Scenario | null {
   const assessment = assessDraft(draft);
   if (!demo && assessment.gaps.length) return null;
   const data = demo ? undefined : assessment.crop;
@@ -93,7 +93,7 @@ export function prepareScenario(draft: PilotDraft | undefined, demo: boolean, as
   const water = volumeFor(data) ?? { volume: assumedVolume ?? demoVolume, source: "Volumen del turno · supuesto editable de la demo" };
   if (!Number.isFinite(water.volume) || water.volume <= 0) return null;
   const area = data ? draft?.parcel?.areaHa ?? 1 : 1;
-  const priority = data?.priority || "Producir forraje";
+  const priority = data?.priority || demoPriority;
   const testTurn = data?.turnDate || demoTurnDate;
   const lastDay = data ? dates.secondHarvest : "2025-08-05";
   const rotations = [second, ...others].map((crop, index) => ({

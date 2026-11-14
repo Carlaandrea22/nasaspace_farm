@@ -42,29 +42,13 @@ export function DraftForm({ children }: { children: (draft: PilotDraft | undefin
     if (status !== "saving") setStatus("edited");
   }
 
-  return (
-    <div onChange={markEdited}>
-      {children(draft.value, save, status, markEdited)}
-    </div>
-  );
+  return children(draft.value, save, status, markEdited);
 }
 
-export function DraftHeader({ title, description, parcel, active }: { title: string; description: string; parcel?: boolean; active?: "compare" | "turn" }) {
-  const current = active ?? (parcel ? "parcel" : "crop");
+export function DraftHeader({ title, description }: { title: string; description: string }) {
   return (
-    <header className="mb-8 border-b border-line pb-7">
-      <nav aria-label="Recorrido de Field Shift" className="mb-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm font-semibold">
-        <a href="/la-maica" className="underline underline-offset-4">La Maica</a>
-        {([
-          ["parcel", "mi-parcela", "Mi parcela"],
-          ["crop", "mi-cultivo-y-mi-agua", "Mi cultivo y mi agua"],
-          ["compare", "comparar", "Comparar tres rotaciones"],
-          ["turn", "mi-proximo-turno", "Mi próximo turno"],
-        ] as const).map(([id, path, label]) => (
-          <a key={id} href={"/la-maica/" + path} aria-current={current === id ? "page" : undefined} className="py-2 text-muted aria-[current=page]:border-b-2 aria-[current=page]:border-action aria-[current=page]:text-ink">{label}</a>
-        ))}
-      </nav>
-      <h1 className="text-[clamp(3.25rem,7vw,6rem)]">{title}</h1>
+    <header className="mb-5 sm:mb-7">
+      <h1>{title}</h1>
       <p className="intro">{description}</p>
     </header>
   );

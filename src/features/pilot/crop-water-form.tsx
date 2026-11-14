@@ -3,11 +3,10 @@
 import { useState, type SubmitEvent } from "react";
 import { Input } from "../../components/ui/input";
 import { NativeSelect } from "../../components/ui/native-select";
-import { cropForParcel, decimal, locationKey, type CropWater } from "./draft";
+import { cropForParcel, decimal, locationKey, productionPriorities, type CropWater } from "./draft";
 import { DraftActions, DraftForm, DraftHeader, Field, type DraftStatus } from "./draft-form";
 
 const crops = ["Maíz forrajero", "Avena forrajera", "Cebada forrajera", "Haba", "Otro"];
-const priorities = ["Producir forraje", "Vender la cosecha", "Usar menos agua", "Diversificar la producción"];
 const sources = ["Canal o acequia", "Pozo", "Río", "Reservorio", "Otra"];
 const turnStatuses = ["Previsto", "Confirmado", "Retrasado", "Aplicado", "Cancelado"];
 const harvestUses = ["Forraje", "Venta", "Consumo", "Semilla"];
@@ -15,19 +14,19 @@ const harvestUses = ["Forraje", "Venta", "Consumo", "Semilla"];
 export function CropWaterForm() {
   return (
     <div className="py-8 sm:py-10">
-      <DraftHeader title="Mi cultivo y mi agua" description="Registra la secuencia de cultivos y el próximo turno de riego. Puedes completar lo que falte más adelante." parcel={false} />
+      <DraftHeader title="Mi cultivo y mi agua" description="Registra la secuencia de cultivos y el próximo turno de riego. Puedes completar lo que falte más adelante." />
       <DraftForm>
-        {(draft, save, status) => {
+        {(draft, save, status, markEdited) => {
           const parcelKey = locationKey(draft?.parcel);
           const data = cropForParcel(draft) ?? (draft?.cropWater?.parcelKey === undefined ? draft?.cropWater : undefined);
-          return <CropWaterFields data={data} save={(cropWater) => save({ cropWater: { ...cropWater, parcelKey } })} status={status} />;
+          return <CropWaterFields data={data} save={(cropWater) => save({ cropWater: { ...cropWater, parcelKey } })} status={status} markEdited={markEdited} />;
         }}
       </DraftForm>
     </div>
   );
 }
 
-function Choice({ name, options, value }: { name: string; options: string[]; value?: string }) {
+function Choice({ name, options, value }: { name: string; options: readonly string[]; value?: string }) {
   return (
     <NativeSelect name={name} defaultValue={value ?? ""}>
       <option value="">Por confirmar</option>
@@ -49,7 +48,7 @@ function CampaignFields({ label, prefix, crop, planting, harvest }: { label: str
   );
 }
 
-function CropWaterFields({ data, save, status }: { data?: CropWater; save: (data: CropWater) => Promise<void>; status: DraftStatus }) {
+function CropWaterFields({ data, save, status, markEdited }: { data?: CropWater; save: (data: CropWater) => Promise<void>; status: DraftStatus; markEdited: () => void }) {
   const [error, setError] = useState("");
 
   function submit(event: SubmitEvent<HTMLFormElement>) {
@@ -85,13 +84,13 @@ function CropWaterFields({ data, save, status }: { data?: CropWater; save: (data
   }
 
   return (
-    <form onSubmit={submit} onChange={() => setError("")}>
-      <div className="grid items-start gap-9 lg:grid-cols-[1.2fr_1fr]">
-        <fieldset disabled={status === "saving"} className="grid min-w-0 gap-5">
-          <legend className="mb-4 font-display text-3xl">Mis cultivos</legend>
+    <form onSubmit={submit} onChange={() => { setError(""); markEdited(); }}>
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+        <fieldset disabled={status === "saving"} className="panel grid gap-5">
+          <legend className="px-2 text-lg font-bold">Mis cultivos</legend>
           <CampaignFields label="Primera campaña" prefix="first" crop={data?.firstCrop} planting={data?.firstPlanting} harvest={data?.firstHarvest} />
           <CampaignFields label="Segunda campaña" prefix="second" crop={data?.secondCrop} planting={data?.secondPlanting} harvest={data?.secondHarvest} />
-          <Field label="Prioridad de producción"><Choice name="priority" options={priorities} value={data?.priority} /></Field>
+          <Field label="Prioridad de producción"><Choice name="priority" options={productionPriorities} value={data?.priority} /></Field>
           <section className="grid gap-3 border-t border-line pt-4" aria-labelledby="current-crop">
             <h3 id="current-crop" className="font-semibold">Lo que está sembrado ahora</h3>
             <Field label="Cultivo actual"><Choice name="currentCrop" options={crops} value={data?.currentCrop} /></Field>
@@ -101,9 +100,8 @@ function CropWaterFields({ data, save, status }: { data?: CropWater; save: (data
             </div>
           </section>
         </fieldset>
-        <div className="border-t border-line pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-8">
-          <fieldset disabled={status === "saving"} className="grid min-w-0 gap-4">
-            <legend className="mb-4 font-display text-3xl">Mi riego</legend>
+        <fieldset disabled={status === "saving"} className="panel grid gap-4">
+            <legend className="px-2 text-lg font-bold">Mi riego</legend>
             <Field label="Fuente de agua"><Choice name="waterSource" options={sources} value={data?.waterSource} /></Field>
             <Field label="Fecha del próximo turno"><Input name="turnDate" type="date" defaultValue={data?.turnDate} /></Field>
             <Field label="Estado del turno"><Choice name="turnStatus" options={turnStatuses} value={data?.turnStatus} /></Field>
@@ -115,8 +113,7 @@ function CropWaterFields({ data, save, status }: { data?: CropWater; save: (data
               <Field label="Duración (min)"><Input name="durationMinutes" inputMode="decimal" defaultValue={data?.durationMinutes ?? ""} /></Field>
             </div>
             <Field label="Volumen de escenario (m³, supuesto)"><Input name="scenarioVolumeM3" inputMode="decimal" defaultValue={data?.scenarioVolumeM3 ?? ""} /></Field>
-          </fieldset>
-        </div>
+        </fieldset>
       </div>
       {error && <p role="alert" className="mt-4 text-sm text-red-800">{error}</p>}
       <DraftActions status={status} next={{ href: "/la-maica/comparar", label: "Ir a la comparación" }} />

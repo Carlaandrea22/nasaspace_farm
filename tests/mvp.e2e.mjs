@@ -22,9 +22,15 @@ test("el invitado guarda su parcela, compara escenarios y reabre el MVP sin red"
     };
     await page.goto(origin);
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
-    await page.getByRole("link", { name: "Continuar sin cuenta" }).click();
-    await page.getByRole("link", { name: "Mi parcela", exact: true }).click();
-    const map = page.getByRole("region", { name: "Mapa de La Maica" });
+    const nav = page.getByRole("navigation", { name: "Navegación principal" });
+    await page.getByRole("heading", { name: "Explora Cochabamba" }).waitFor();
+    assert.equal(await nav.getByRole("link", { name: "Explorar" }).getAttribute("aria-current"), "page");
+    const map = page.getByRole("region", { name: "Mapa de Cochabamba" });
+    await map.locator(".leaflet-districts-pane path").first().waitFor({ state: "attached" });
+    await page.getByLabel("Distrito", { exact: true }).selectOption("9");
+    await page.getByRole("button", { name: "Marcar centro" }).click();
+    assert.match(await page.getByLabel("Latitud").inputValue(), /^-17\./);
+    await page.getByRole("button", { name: "La Maica · D9 / Itocta" }).click();
     await map.locator(".leaflet-overlay-pane path").first().waitFor({ state: "attached" });
     await page.getByLabel("Nombre de la parcela (opcional)").fill("Parcela de prueba");
     await page.getByLabel("Superficie (ha, opcional)").fill("1,5");
@@ -42,36 +48,48 @@ test("el invitado guarda su parcela, compara escenarios y reabre el MVP sin red"
     assert.equal(await cards.count(), 3);
     const plannedDate = await page.getByTestId("selected-turn").textContent();
     const volume = page.getByLabel("Volumen del turno (m³, supuesto)");
+    const priority = page.getByLabel("Mi prioridad en la demo");
     const originalVolume = await volume.inputValue();
+    const originalPriority = await priority.inputValue();
     await page.getByRole("button", { name: "5 días más tarde" }).click();
     const delayedDate = await page.getByTestId("selected-turn").textContent();
     assert.equal(delayedDate.split("/").reverse().join("-"), dateShift(plannedDate.split("/").reverse().join("-"), 5));
     assert.equal(await volume.inputValue(), originalVolume);
+    assert.equal(await priority.inputValue(), originalPriority);
     await page.getByText("Primer día adicional de estrés", { exact: true }).first().waitFor();
     await page.getByText("¿Por qué?", { exact: true }).click();
     await page.getByRole("link", { name: "NASA POWER", exact: true }).waitFor();
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await priority.selectOption("Vender la cosecha");
+    assert.equal(await page.getByTestId("selected-turn").textContent(), delayedDate);
+    await cards.filter({ hasText: "Opción C · Preferida" }).waitFor();
 
     await context.setOffline(true);
     await page.reload();
     await page.getByRole("heading", { name: "Matriz de decisión" }).waitFor();
-    await page.getByRole("link", { name: "Mi cultivo y mi agua", exact: true }).click();
-    assert.equal(await page.getByLabel("Caudal (L/s)").inputValue(), "5");
-    await page.getByRole("link", { name: "Mi parcela", exact: true }).click();
+    await nav.getByRole("link", { name: "Explorar" }).click();
+    await map.locator(".leaflet-districts-pane path").first().waitFor({ state: "attached" });
+    await page.getByText("Imágenes satelitales no disponibles. El mapa local sigue activo.").waitFor();
+    assert.ok(await page.getByRole("checkbox", { name: "Satélite" }).isDisabled());
+    await nav.getByRole("link", { name: "Mis parcelas" }).click();
+    assert.equal(await page.getByLabel("Nombre de la parcela (opcional)").inputValue(), "Parcela de prueba");
     assert.equal(await page.getByLabel("Superficie (ha, opcional)").inputValue(), "1.5");
     assert.equal(await page.getByRole("region", { name: "Mapa de La Maica" }).count(), 0);
+    await page.getByRole("link", { name: "Ir a cultivo y agua" }).click();
+    assert.equal(await page.getByLabel("Caudal (L/s)").inputValue(), "5");
+    await nav.getByRole("link", { name: "Mis parcelas" }).click();
     await page.getByRole("button", { name: "Tirani · D13 / Tunari" }).click();
     await page.getByText("Referencia del piloto:", { exact: false }).waitFor();
     await save();
-    await page.getByRole("link", { name: "Comparar tres rotaciones" }).click();
+    await nav.getByRole("link", { name: "Rotaciones" }).click();
     await page.getByRole("heading", { name: /Tirani.*datos insuficientes/ }).waitFor();
     assert.equal(await cards.count(), 0);
     await page.getByText("Incorpora suelo, clima histórico y alternativas agronómicas compatibles con esta ubicación.").waitFor();
-    await page.getByRole("link", { name: "Mi cultivo y mi agua", exact: true }).click();
+    await page.getByRole("link", { name: "Completar cultivo y agua" }).click();
     assert.equal(await page.getByLabel("Caudal (L/s)").inputValue(), "");
     await page.getByLabel("Caudal (L/s)").fill("10");
     await save();
-    await page.getByRole("link", { name: "Mi parcela", exact: true }).click();
+    await nav.getByRole("link", { name: "Mis parcelas" }).click();
     await page.getByRole("button", { name: "La Maica · D9 / Itocta" }).click();
     await save();
     await page.getByRole("link", { name: "Ir a cultivo y agua" }).click();
@@ -96,11 +114,17 @@ test("la inspección se puede abrir y descargar con condiciones controladas", as
     } }));
     await page.route("**/api/weather?*", (route) => route.fulfill({ json: {
       today, queriedAt, recent: [], days: Array.from({ length: 14 }, (_, index) => ({
-        date: dateShift(today, index), rain: index === 0 ? 40 : 0, et0: 3, minimum: 9,
+        date: dateShift(today, index), rain: index === 0 ? 40 : index === 7 ? 7 : 0, et0: 3, minimum: 9,
       })),
     } }));
     await page.goto(origin + "/la-maica/mi-proximo-turno");
+    await page.getByRole("heading", { name: "Próximos 7 días" }).waitFor();
+    const forecast = page.getByRole("region", { name: "Pronóstico" });
+    await forecast.getByRole("definition").filter({ hasText: /^40 mm$/ }).waitFor();
+    await forecast.getByRole("button", { name: "14 días" }).click();
     await page.getByRole("heading", { name: "Próximos 14 días" }).waitFor();
+    await forecast.getByText("47 mm", { exact: true }).waitFor();
+    await forecast.getByText(/La segunda semana tiene mayor incertidumbre/).waitFor();
     await page.getByText("Abrir ficha de inspección").click();
     const next = page.waitForEvent("download");
     await page.getByRole("button", { name: "Descargar ficha" }).click();

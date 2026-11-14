@@ -1,39 +1,24 @@
-import Image from "next/image";
+import { ArrowRight } from "lucide-react";
+import { Button } from "../components/ui/button";
+import { ParcelForm } from "../features/pilot/parcel-form";
 
 export default function HomePage() {
   return (
-    <div className="welcome">
-      <div className="welcome-copy">
-        <p className="location">La Maica · D9, Itocta</p>
-        <h1>¿Y si el agua<br className="desktop-break" /> llega tarde?</h1>
-        <p className="intro">
-          Explora el caso de La Maica y conoce las tres rotaciones que queremos
-          comparar cuando un turno de riego se retrasa cinco días.
-        </p>
-        {/* A document navigation uses the offline page cached by the service worker. */}
-        <a className="action" href="/la-maica">
-          Continuar sin cuenta <span aria-hidden="true">→</span>
-        </a>
-      </div>
-      <figure className="landscape">
-        <div className="landscape-photo">
-          <Image
-            src="/images/valle-cochabamba.jpg"
-            alt="Valle de Cochabamba visto desde la cordillera del Tunari"
-            fill
-            unoptimized
-            preload
-          />
-        </div>
-        <figcaption>
-          <span>Valle de Cochabamba</span>
-          <span>
-            <a href="https://commons.wikimedia.org/wiki/File:Valle_de_Cochabamba_desde_Cordillera_Tunari.jpg">51114u9</a>
-            {" · "}
-            <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>
-          </span>
-        </figcaption>
-      </figure>
+    <div className="pb-5">
+      <ParcelForm explore />
+      <section className="pilot-card" aria-labelledby="demo-title">
+        <p className="text-sm font-semibold text-leaf">Piloto · D9 / Itocta</p>
+        <h2 id="demo-title" className="mt-1 text-2xl font-bold">¿Y si el turno llega cinco días tarde?</h2>
+        <p className="mt-2 max-w-md text-sm">Compara tres rotaciones con los datos ilustrativos de La Maica.</p>
+        <Button asChild className="mt-4 border-leaf bg-leaf text-ink hover:border-white hover:bg-white hover:text-ink">
+          <a href="/la-maica">Continuar sin cuenta <ArrowRight size={17} aria-hidden="true" /></a>
+        </Button>
+        <small className="mt-4 block text-xs">
+          Foto del valle <a className="underline underline-offset-3" href="https://commons.wikimedia.org/wiki/File:Valle_de_Cochabamba_desde_Cordillera_Tunari.jpg">51114u9</a>
+          {" · "}
+          <a className="underline underline-offset-3" href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>
+        </small>
+      </section>
     </div>
   );
 }

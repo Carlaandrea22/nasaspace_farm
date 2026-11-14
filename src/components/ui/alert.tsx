@@ -7,7 +7,7 @@ export function Alert({ className, role = "alert", ...props }: ComponentProps<"d
     <div
       data-slot="alert"
       role={role}
-      className={cn("space-y-1 border-l-3 border-action bg-action/5 px-5 py-4 text-ink", className)}
+      className={cn("space-y-1 rounded-xl border border-line bg-leaf/45 px-4 py-4 text-ink sm:px-5", className)}
       {...props}
     />
   );

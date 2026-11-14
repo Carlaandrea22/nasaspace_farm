@@ -1,14 +1,15 @@
 @import "tailwindcss";
 
 @theme {
-  --color-canvas: #eef0e7;
-  --color-ink: #1e3425;
-  --color-muted: #48594c;
-  --color-line: #b9c3b2;
-  --color-action: #304d37;
-  --color-leaf: #bfce8c;
-  --font-sans: "Instrument Sans Variable", system-ui, sans-serif;
-  --font-display: "Instrument Serif", Georgia, serif;
+  --color-canvas: #f3f6ef;
+  --color-surface: #fcfdf9;
+  --color-ink: #203020;
+  --color-muted: #51624e;
+  --color-line: #dce6d6;
+  --color-action: #173c30;
+  --color-leaf: #d8ebc9;
+  --font-sans: "DM Sans Variable", system-ui, sans-serif;
+  --font-display: "DM Sans Variable", system-ui, sans-serif;
 }
 
 body {
@@ -16,124 +17,188 @@ body {
 }
 
 :focus-visible {
-  @apply outline-2 outline-offset-4 outline-action;
-}
-
-.page-width {
-  width: min(100% - 3rem, 76rem);
-  margin-inline: auto;
+  outline: 2px solid #ad551c;
+  outline-offset: 3px;
 }
 
 .skip-link {
-  @apply sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-10 focus:bg-canvas focus:p-3;
+  @apply sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-xl focus:bg-surface focus:p-3;
 }
 
 .site-header {
-  @apply flex min-h-21 items-center justify-between gap-3 border-b border-line;
+  @apply border-b border-line bg-[#f8faf5];
 }
 
-.site-header p, .location {
-  @apply text-sm font-medium text-muted;
+.header-inner {
+  @apply mx-auto flex min-h-[4.25rem] max-w-[78rem] items-center justify-between gap-3 px-4 sm:px-6;
 }
 
 .brand {
-  @apply font-display text-4xl leading-none;
+  @apply inline-flex items-center gap-2.5 leading-tight;
 }
 
-.brand span {
-  @apply text-action;
+.brand-mark {
+  @apply grid size-10 shrink-0 place-items-center rounded-[13px] bg-leaf text-action;
 }
 
-.welcome {
-  display: grid;
-  grid-template-columns: minmax(0, 0.94fr) minmax(0, 1fr);
-  gap: clamp(2rem, 6vw, 6.5rem);
-  align-items: center;
-  min-height: min(47rem, calc(100svh - 5.25rem));
-  padding-block: 3rem;
+.brand strong, .brand small {
+  @apply block;
+}
+
+.brand small {
+  @apply text-xs text-muted;
+}
+
+.project-link {
+  @apply inline-flex min-h-11 items-center rounded-xl bg-leaf/70 px-3 text-center text-sm font-bold hover:bg-leaf motion-safe:transition-colors sm:px-4;
+}
+
+.app-frame {
+  @apply mx-auto max-w-[78rem];
+}
+
+.app-frame main {
+  min-width: 0;
+  padding-inline: clamp(1rem, 2.5vw, 2rem);
+  padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+}
+
+.app-navigation {
+  @apply fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-line bg-surface px-2 pt-1.5;
+  padding-bottom: max(0.375rem, env(safe-area-inset-bottom));
+  box-shadow: 0 -6px 24px rgb(23 60 48 / 6%);
+}
+
+.app-navigation a {
+  @apply flex min-h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-center text-xs font-semibold leading-none text-muted hover:bg-leaf/50 motion-safe:transition-colors;
+}
+
+.app-navigation a[aria-current="page"] {
+  @apply bg-leaf text-action;
+}
+
+@media (min-width: 55rem) {
+  .app-frame {
+    display: grid;
+    grid-template-columns: 12.25rem minmax(0, 1fr);
+    align-items: start;
+    padding-inline: 1rem;
+  }
+
+  .app-navigation {
+    @apply sticky top-4 mt-6 flex flex-col gap-1 border-0 bg-transparent p-2 shadow-none;
+  }
+
+  .app-navigation a {
+    @apply flex-row justify-start gap-3 px-4 text-left text-sm;
+  }
+
+  .app-frame main {
+    padding-bottom: 2rem;
+  }
 }
 
 h1 {
-  @apply font-display font-normal;
-  margin-block: 1.25rem;
-  font-size: clamp(4.25rem, 7.65vw, 7.75rem);
-  line-height: 0.98;
+  @apply font-bold;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+}
+
+h2 {
   letter-spacing: -0.025em;
 }
 
 .intro {
-  @apply max-w-[32rem] text-muted;
-  font-size: clamp(1.0625rem, 1.65vw, 1.25rem);
-  line-height: 1.55;
+  @apply mt-2 max-w-2xl leading-relaxed text-muted;
 }
 
-.action {
-  @apply mt-8 inline-flex min-h-12 items-center gap-5 rounded-sm bg-action px-5 py-3 font-semibold text-white hover:bg-ink;
+.location {
+  @apply mb-2 text-sm font-semibold text-muted;
 }
 
-.action span {
-  @apply text-leaf;
+.panel {
+  @apply min-w-0 rounded-2xl border border-line bg-surface p-4 sm:p-5;
 }
 
-.landscape-photo {
-  @apply relative overflow-hidden bg-action;
-  aspect-ratio: 1.13;
-  border-radius: 10rem 0.25rem 0.25rem 0.25rem;
+.rotation-option[data-preferred="true"] {
+  @apply border-[#829e76] bg-[#edf5e5];
 }
 
-.landscape-photo img {
-  object-fit: cover;
-  object-position: center;
+.pilot-card {
+  @apply rounded-2xl px-5 pt-9 pb-5 text-white sm:px-8;
+  background: linear-gradient(90deg, #132b20 0%, #132b20ed 38%, #1a372d66 100%), url("/images/valle-cochabamba.jpg") center 59% / cover;
 }
 
-.landscape figcaption {
-  @apply flex flex-wrap justify-between gap-x-4 gap-y-1 border-b border-line py-3 text-xs text-muted;
-}
-
-.landscape figcaption a {
-  @apply underline decoration-line underline-offset-4 hover:decoration-current;
+@media (max-width: 35rem) {
+  .pilot-card {
+    background-image: linear-gradient(90deg, #132b20f7 5%, #132b20ba 100%), url("/images/valle-cochabamba.jpg");
+  }
 }
 
 .pilot {
-  @apply pt-8 pb-14 sm:pt-10;
+  @apply py-6 sm:py-9;
 }
 
 .pilot-overview {
-  @apply grid items-end gap-7 border-b border-line pt-9 pb-9 sm:pt-12 lg:grid-cols-[1.7fr_1fr];
+  @apply grid items-end gap-5 pt-6 pb-3 md:grid-cols-[1.7fr_1fr];
+}
+
+.rotations {
+  @apply mt-7;
+}
+
+.rotations h2 {
+  @apply text-2xl font-bold;
 }
 
 .rotations > p {
   @apply mt-1 text-sm leading-relaxed text-muted;
 }
 
-.rotations {
-  @apply mt-8;
-}
-
-.rotations h2 {
-  @apply font-display text-4xl;
-}
-
 .rotations ul {
-  @apply mt-4 border-t border-line;
+  @apply mt-4 divide-y divide-line border-y border-line;
 }
 
 .rotations li {
-  @apply flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-line py-4;
+  @apply flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-4;
 }
 
 .rotations li span {
   @apply text-sm text-muted;
 }
 
-@media (max-width: 48rem) {
-  .page-width { width: calc(100% - 2rem); }
-  .site-header { min-height: 4rem; }
-  .welcome { grid-template-columns: 1fr; min-height: auto; padding-block: 2.5rem; }
-  .desktop-break { display: none; }
-  .landscape-photo { aspect-ratio: 1.65; border-top-left-radius: 5rem; }
+.parcel-viewport {
+  @apply h-[22rem] w-full bg-[#e2ebd8] sm:h-[28rem];
 }
 
-@media (max-width: 24rem) {
-  h1 { font-size: 3.75rem; }
+.parcel-viewport[data-overview="true"] {
+  height: clamp(22rem, 57svh, 39rem);
+}
+
+.parcel-map-action {
+  @apply px-2.5 shadow-sm;
+}
+
+.parcel-viewport .leaflet-control-attribution {
+  max-width: min(24rem, 68vw);
+  text-align: right;
+}
+
+.parcel-viewport .leaflet-control-zoom a {
+  width: 39px;
+  height: 39px;
+  line-height: 39px;
+}
+
+.district-label.leaflet-tooltip {
+  @apply border-0 bg-action text-white shadow-none;
+}
+
+.district-label.priority-district.leaflet-tooltip {
+  @apply bg-leaf font-bold text-action;
+}
+
+.parcel-viewport.hide-district-labels .district-label {
+  display: none;
 }

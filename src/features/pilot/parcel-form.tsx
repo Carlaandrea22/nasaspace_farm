@@ -12,27 +12,32 @@ import { DraftActions, DraftForm, DraftHeader, Field, type DraftStatus } from ".
 
 const ParcelMap = dynamic(() => import("./parcel-map"), {
   ssr: false,
-  loading: () => <p role="status" className="grid h-80 place-items-center bg-action/5 text-muted">Abriendo el mapa…</p>,
+  loading: () => <p role="status" className="parcel-viewport grid place-items-center rounded-2xl text-muted">Abriendo el mapa…</p>,
 });
 
-export function ParcelForm() {
+export function ParcelForm({ explore = false }: { explore?: boolean }) {
+  const title = explore ? "Explora Cochabamba" : "Mi parcela";
+  const description = explore
+    ? "Toca un distrito para acercarte. Luego toca el terreno para marcar tu parcela."
+    : "Guarda la ubicación y los datos de tu parcela en este dispositivo.";
   return (
-    <div className="py-8 sm:py-10">
-      <DraftHeader title="Mi parcela" description="Marca la ubicación de tu parcela y guarda el borrador para retomarla en este dispositivo." parcel />
+    <div className="py-6 sm:py-9">
+      <DraftHeader title={title} description={description} />
       <DraftForm>
         {(draft, save, status, markEdited) => (
-          <ParcelFields parcel={draft?.parcel} save={(parcel) => save({ parcel })} status={status} markEdited={markEdited} />
+          <ParcelFields parcel={draft?.parcel} explore={explore} save={(parcel) => save({ parcel })} status={status} markEdited={markEdited} />
         )}
       </DraftForm>
     </div>
   );
 }
 
-function ParcelFields({ parcel, save, status, markEdited }: { parcel?: Parcel; save: (parcel: Parcel) => Promise<void>; status: DraftStatus; markEdited: () => void }) {
-  const [latitude, setLatitude] = useState(String(parcel?.latitude ?? pilotCoordinates.latitude));
-  const [longitude, setLongitude] = useState(String(parcel?.longitude ?? pilotCoordinates.longitude));
+function ParcelFields({ parcel, explore, save, status, markEdited }: { parcel?: Parcel; explore: boolean; save: (parcel: Parcel) => Promise<void>; status: DraftStatus; markEdited: () => void }) {
+  const initial = parcel ?? (explore ? null : pilotCoordinates);
+  const [latitude, setLatitude] = useState(String(initial?.latitude ?? ""));
+  const [longitude, setLongitude] = useState(String(initial?.longitude ?? ""));
   const [error, setError] = useState("");
-  const [mapOpen, setMapOpen] = useState(!parcel);
+  const [mapOpen, setMapOpen] = useState(explore || !parcel);
   const [view, setView] = useState("");
   const [consulting, setConsulting] = useState(false);
   const [lookupError, setLookupError] = useState("");
@@ -98,26 +103,26 @@ function ParcelFields({ parcel, save, status, markEdited }: { parcel?: Parcel; s
 
   return (
     <div className="grid gap-6">
-      <div className="flex flex-wrap items-center gap-2" aria-label="Casos de referencia" role="group">
-        {Object.entries(referenceCases).map(([key, option]) => (
-          <Button key={key} type="button" variant="secondary" aria-pressed={reference === key} className="aria-pressed:border-action aria-pressed:bg-action/10" onClick={() => selectPoint(option)}>{option.label}</Button>
-        ))}
-      </div>
-      <div className="grid items-start gap-8 lg:grid-cols-[1.55fr_1fr]">
+      <div className={explore ? "grid gap-6" : "grid items-start gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]"}>
         <section aria-labelledby="map-title" className="min-w-0">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h2 id="map-title" className="font-display text-3xl">Mapa de referencia</h2>
-            <Button type="button" variant="secondary" aria-controls="parcel-map" aria-expanded={mapOpen} onClick={() => setMapOpen(!mapOpen)}>{mapOpen ? "Ocultar mapa" : "Abrir mapa"}</Button>
+          <div className={explore ? "sr-only" : "mb-3 flex flex-wrap items-center justify-between gap-2"}>
+            <h2 id="map-title" className="text-xl font-bold">Mapa de referencia</h2>
+            {!explore && <Button type="button" variant="secondary" aria-controls="parcel-map" aria-expanded={mapOpen} onClick={() => setMapOpen(!mapOpen)}>{mapOpen ? "Ocultar mapa" : "Abrir mapa"}</Button>}
           </div>
           <div id="parcel-map" hidden={!mapOpen}>
-            {mapOpen && <ParcelMap selected={selected} onSelect={selectPoint} onView={setView} />}
-            <p className="mt-3 text-sm text-muted">Toca el mapa para mover el punto o escribe las coordenadas. Los recortes muestran caminos, áreas agrícolas y cursos de agua.</p>
+            {mapOpen && <ParcelMap overview={explore} selected={selected} onSelect={selectPoint} onView={setView} />}
           </div>
           {!mapOpen && <p className="text-sm text-muted">Puedes consultar o editar las coordenadas sin abrir el mapa.</p>}
+          <div className="mt-3 flex flex-wrap items-center gap-2" aria-label="Casos de referencia" role="group">
+            {Object.entries(referenceCases).map(([key, option]) => (
+              <Button key={key} type="button" variant="secondary" aria-pressed={reference === key} className="aria-pressed:border-action aria-pressed:bg-leaf" onClick={() => selectPoint(option)}>{option.label}</Button>
+            ))}
+          </div>
         </section>
-        <section aria-labelledby="parcel-fields" className="border-t border-line pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-8">
-          <h2 id="parcel-fields" className="font-display text-3xl">Datos de la parcela</h2>
-          <form className="mt-5" onSubmit={submit} onChange={() => setError("")}>
+        <section aria-labelledby="parcel-fields" className="panel">
+          <h2 id="parcel-fields" className="text-xl font-bold">Datos de la parcela</h2>
+          <p className="mt-1 text-sm text-muted">Marca un punto o escribe las coordenadas. Tu borrador se guarda sin cuenta.</p>
+          <form className="mt-4" onSubmit={submit} onChange={() => { setError(""); markEdited(); }}>
             <fieldset disabled={status === "saving"} className="grid gap-4">
               <Field label="Nombre de la parcela (opcional)"><Input name="name" maxLength={100} defaultValue={parcel?.name ?? ""} /></Field>
               <div className="grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-4">

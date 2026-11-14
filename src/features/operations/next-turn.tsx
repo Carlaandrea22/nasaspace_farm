@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CalendarDays, CloudRain } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import { Button } from "../../components/ui/button";
 import { DraftForm, DraftHeader } from "../pilot/draft-form";
@@ -98,15 +99,15 @@ function OperationalPlan({ cropWater, forecast, cached }: { cropWater?: CropWate
   const turn = !cached && !turnClosed && turnDate && forecast?.days.find((day) => day.date === turnDate);
 
   return (
-    <section aria-labelledby="operating-title" className="grid gap-4 border-b border-line pb-6 md:grid-cols-[1fr_1fr_1.55fr]">
+    <section aria-labelledby="operating-title" className="panel grid gap-4 md:grid-cols-[1fr_1fr_1.55fr]">
       <div>
-        <p id="operating-title" className="text-sm text-muted">Turno declarado</p>
-        <p className="mt-1 font-display text-3xl">{turnDate ? formatDate(turnDate) : "Por registrar"}</p>
+        <h2 id="operating-title" className="flex items-center gap-2 text-sm font-semibold"><CalendarDays size={18} aria-hidden="true" /> Turno declarado</h2>
+        <p className="mt-1 text-2xl font-bold">{turnDate ? formatDate(turnDate) : "Por registrar"}</p>
         {cropWater?.turnStatus && <p className="text-sm text-muted">{cropWater.turnStatus}</p>}
       </div>
       <div>
         <p className="text-sm text-muted">{crop.name}</p>
-        <p className="mt-1 font-display text-3xl">{crop.stage}</p>
+        <p className="mt-1 text-xl font-bold">{crop.stage}</p>
         <p className="mt-1 text-sm text-muted">Etapa estimada con las fechas declaradas.</p>
       </div>
       <div className="border-t border-line pt-4 md:border-t-0 md:border-l md:pt-0 md:pl-5">
@@ -128,8 +129,8 @@ function HorizonSummary({ title, days }: { title: string; days: WeatherDay[] }) 
     <div className="border-t border-line py-4">
       <h3 className="font-semibold">{title}</h3>
       <dl className="mt-2 grid grid-cols-2 gap-3">
-        <div><dt className="text-sm text-muted">Lluvia acumulada</dt><dd className="font-display text-3xl">{amount(totals.rain)}</dd></div>
-        <div><dt className="text-sm text-muted">ET₀ acumulada</dt><dd className="font-display text-3xl">{amount(totals.et0)}</dd></div>
+        <div><dt className="text-sm text-muted">Lluvia acumulada</dt><dd className="text-2xl font-bold">{amount(totals.rain)}</dd></div>
+        <div><dt className="text-sm text-muted">ET₀ acumulada</dt><dd className="text-2xl font-bold">{amount(totals.et0)}</dd></div>
       </dl>
       {(totals.rainCount < totals.count || totals.et0Count < totals.count) && <p className="mt-2 text-sm text-muted">
         Días con datos: lluvia {totals.rainCount}/{totals.count}, ET₀ {totals.et0Count}/{totals.count}.
@@ -139,13 +140,20 @@ function HorizonSummary({ title, days }: { title: string; days: WeatherDay[] }) 
 }
 
 function ForecastDetails({ forecast }: { forecast: Forecast }) {
-  const days = horizon(forecast.days, forecast.today, 14);
+  const [period, setPeriod] = useState<7 | 14>(7);
+  const days = horizon(forecast.days, forecast.today, period);
   return (
-    <section aria-labelledby="forecast-title" className="min-w-0">
-      <h2 id="forecast-title" className="mb-3 font-display text-4xl">Pronóstico</h2>
-      <p className="mb-3 text-sm leading-relaxed text-muted">La segunda semana tiene mayor incertidumbre. Confirma el pronóstico más cerca del turno.</p>
-      <HorizonSummary title="Próximos 7 días" days={days.slice(0, 7)} />
-      <HorizonSummary title="Próximos 14 días" days={days} />
+    <section aria-labelledby="forecast-title" className="panel">
+      <h2 id="forecast-title" className="flex items-center gap-2 text-2xl font-bold"><CloudRain size={23} aria-hidden="true" /> Pronóstico</h2>
+      <div role="group" aria-label="Horizonte del pronóstico" className="my-3 flex gap-2">
+        {([7, 14] as const).map((value) => (
+          <Button key={value} variant="secondary" aria-pressed={period === value} className="aria-pressed:border-action aria-pressed:bg-leaf" onClick={() => setPeriod(value)}>{value} días</Button>
+        ))}
+      </div>
+      <div aria-live="polite">
+        <HorizonSummary title={`Próximos ${period} días`} days={days} />
+        {period === 14 && <p className="mb-3 rounded-lg bg-leaf/65 p-2.5 text-sm leading-relaxed text-muted">La segunda semana tiene mayor incertidumbre. Confirma el pronóstico más cerca del turno.</p>}
+      </div>
       <details className="border-y border-line py-3 text-sm">
         <summary className="min-h-8 cursor-pointer font-semibold">Ver datos por día</summary>
         <table className="mt-2 w-full text-left text-sm">
@@ -186,8 +194,8 @@ function Inspection({ sheet }: { sheet: NonNullable<ReturnType<typeof buildInspe
   }
 
   return (
-    <section aria-labelledby="inspection-title" className="mb-7 border-l-3 border-action bg-action/5 p-4 sm:p-6">
-      <h2 id="inspection-title" className="font-display text-4xl">Ficha de inspección por sector</h2>
+    <section aria-labelledby="inspection-title" className="mb-7 rounded-2xl border border-action/30 bg-leaf/65 p-4 sm:p-6">
+      <h2 id="inspection-title" className="text-2xl font-bold">Ficha de inspección por sector</h2>
       <p className="mt-2 text-sm font-semibold">{sheet.zone} · {formatDate(sheet.date)}</p>
       <p className="mt-2 text-sm">{sheet.reason}</p>
       <details className="mt-3 text-sm">
@@ -234,9 +242,9 @@ function ForecastPanel({ parcel, cropWater }: { parcel?: Parcel; cropWater?: Cro
           : "Exposición y sector aún por confirmar con el GAMC."}
       </AlertDescription></Alert>}
       {forecast && (
-        <div className="grid gap-x-8 gap-y-7 lg:grid-cols-[1fr_1.3fr]">
-          <section aria-labelledby="recent-title" className="min-w-0">
-            <h2 id="recent-title" className="mb-3 font-display text-4xl">Lluvia reciente</h2>
+        <div className="grid items-start gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+          <section aria-labelledby="recent-title" className="panel order-2 md:order-0">
+            <h2 id="recent-title" className="mb-3 text-2xl font-bold">Lluvia reciente</h2>
             <ul className="divide-y divide-line border-y border-line">
               {forecast.recent.map((day) => (
                 <li key={day.date} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 py-3 text-sm">
@@ -264,7 +272,7 @@ function ForecastPanel({ parcel, cropWater }: { parcel?: Parcel; cropWater?: Cro
 export function NextTurn() {
   return (
     <div className="py-8 sm:py-10">
-      <DraftHeader title="Mi próximo turno" description="Revisa la lluvia y el pronóstico antes de confirmar tu turno de riego." active="turn" />
+      <DraftHeader title="Mi próximo turno" description="Revisa la lluvia y el pronóstico antes de confirmar tu turno de riego." />
       <DraftForm>{(draft) => <ForecastPanel parcel={draft?.parcel} cropWater={cropForParcel(draft)} />}</DraftForm>
     </div>
   );

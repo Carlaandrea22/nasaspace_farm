@@ -2,7 +2,7 @@
 
 PWA para pequeños productores y regantes del municipio de Cochabamba. Compara rotaciones con los mismos datos de clima y suelo, ensaya un retraso en el riego y reúne lo que conviene confirmar antes del siguiente turno. Proyecto de [NASA Space Apps Challenge 2026](https://www.spaceappschallenge.org/2026/challenges/adapting-farms-with-nasa-data/) con [enfoque de Cochabamba](https://www.spaceappschallenge-cbba.com/index.php).
 
-**Estado.** MVP local de cuatro pantallas. La Maica, D9 / Itocta, tiene un caso ilustrativo de punta a punta. Tirani, D13 / Tunari, tiene prueba territorial y respuesta explícita de datos faltantes. Los borradores se guardan en el navegador sin cuenta.
+**Estado.** MVP local con la interfaz **Agua y Siembra** diseñada por Carla y el modelo de Field Shift. La Maica, D9 / Itocta, tiene un caso ilustrativo de punta a punta. Tirani, D13 / Tunari, tiene prueba territorial y respuesta explícita de datos faltantes. Los borradores se guardan en el navegador sin cuenta.
 
 - [Operación local](#operación-local)
 - [Guion de demo](#guion-de-demo)
@@ -20,9 +20,9 @@ docker compose up --build --detach --wait
 docker compose ps
 ```
 
-Abre [localhost:3000](http://localhost:3000) y selecciona **Continuar sin cuenta**. El puerto se puede cambiar con `FIELD_SHIFT_PORT=3001 docker compose up --build --detach --wait`. Consulta registros con `docker compose logs app` y detén el servicio con `docker compose stop`.
+Abre [localhost:3000](http://localhost:3000). **Explorar** abre el mapa de Cochabamba. **Mis parcelas** recupera el borrador del dispositivo y da acceso a **Mi cultivo y mi agua**. **Rotaciones** abre el simulador y **Agua** abre el próximo turno. El botón **Piloto La Maica** abre los detalles y accesos del caso piloto. El puerto se puede cambiar con `FIELD_SHIFT_PORT=3001 docker compose up --build --detach --wait`. Consulta registros con `docker compose logs app` y detén el servicio con `docker compose stop`.
 
-La PWA se puede instalar en un navegador compatible. Después de que el service worker aparezca activo, las cuatro vistas, la comparación, los mapas base locales y los borradores funcionan sin señal. La app guarda los resultados territoriales consultados con el borrador. El pronóstico conserva una copia fechada por ubicación después de una consulta y suspende la ficha de inspección cuando opera con esa copia. Los servicios externos en vivo requieren conexión. Docker publica el puerto en loopback. Para probar instalación en un teléfono físico, usa un acceso HTTPS local con certificado reconocido por el dispositivo.
+La PWA se puede instalar en un navegador compatible. Después de que el service worker aparezca activo, las vistas, la comparación, los polígonos distritales, los recortes de La Maica y Tirani y los borradores funcionan sin señal. La imagen satelital, la búsqueda de lugares y las consultas nuevas a GAMC y Open-Meteo requieren conexión. El buscador consulta Photon al pulsar **Buscar**. **Mi ubicación** pide permiso al pulsarla y centra la vista. El punto se registra al marcarlo y pulsar **Guardar borrador**. La app guarda los resultados territoriales consultados con el borrador. El pronóstico conserva una copia fechada por ubicación después de una consulta y suspende la ficha de inspección cuando opera con esa copia. Docker publica el puerto en loopback. Para probar instalación en un teléfono físico, usa un acceso HTTPS local con certificado reconocido por el dispositivo.
 
 Para desarrollar y ejecutar las pruebas en la máquina, usa Node.js 24 y Python 3.11+.
 
@@ -40,10 +40,10 @@ Las pruebas de navegador se ejecutan con Docker en marcha y se pueden dirigir a 
 
 ## Guion de demo
 
-1. Abre [Mi parcela](http://localhost:3000/la-maica/mi-parcela). Carga **La Maica · D9 / Itocta** y consulta el GAMC. Revisa las tres capas y guarda el borrador. Al recuperar la ficha puedes leer sus datos con el mapa cerrado.
+1. Abre [Explorar](http://localhost:3000). Elige un distrito para acercarte y marca un punto en el mapa o con **Marcar centro**. Carga **La Maica · D9 / Itocta** para seguir el piloto y consulta el GAMC. Guarda el borrador. En **Mis parcelas** puedes recuperarlo con el mapa cerrado y activar las capas oficiales en **Capa GAMC**.
 2. En **Mi cultivo y mi agua**, registra dos campañas, cultivo actual, uso de cosecha, prioridad y turno. Si no sabes el volumen, escribe caudal y duración o define el volumen de escenario explícitamente. Guarda cada ficha antes de pasar a otra pantalla.
-3. En **Comparar tres rotaciones**, elige **Demo La Maica**. La primera campaña es maíz forrajero. La segunda compara avena forrajera, cebada forrajera y haba. Alterna **Turno previsto / 5 días más tarde**, compara las métricas y abre **¿Por qué?** para ver el periodo, la procedencia y los supuestos. El haba queda condicionada al destino, al agua y a la aptitud local. **Mi parcela** cambia a los datos guardados cuando hay un perfil suficiente y compatible con el corte histórico.
-4. Abre **Mi próximo turno** para leer la lluvia reciente, el pronóstico a 7 y 14 días y la acción para revisar con el regante. Cuando coinciden lluvia intensa y exposición cartografiada, abre la ficha de inspección y descárgala. El caso positivo se puede repetir con `npm run test:e2e`, que usa condiciones controladas.
+3. En **Rotaciones**, elige **Demo La Maica**. La primera campaña es maíz forrajero. La segunda compara avena forrajera, cebada forrajera y haba. Alterna **Turno previsto / 5 días más tarde**, compara las métricas y abre **¿Por qué?** para ver el periodo, la procedencia y los supuestos. Después puedes probar otra prioridad de la demo y ver cómo afecta a la compatibilidad. El haba queda condicionada al destino, al agua y a la aptitud local. **Mi parcela** cambia a los datos guardados cuando hay un perfil suficiente y compatible con el corte histórico.
+4. Abre **Agua** para leer la lluvia reciente, alternar el pronóstico entre **7 días** y **14 días** y revisar la acción para el regante. Cuando coinciden lluvia intensa y exposición cartografiada, abre la ficha de inspección y descárgala. El caso positivo se puede repetir con `npm run test:e2e`, que usa condiciones controladas.
 5. Regresa a **Mi parcela**, selecciona **Tirani · D13 / Tunari**, consulta GAMC y guarda. La comparación indica qué datos faltan y mantiene las rotaciones de La Maica dentro de su demo. Separa la información agrícola guardada por coordenadas para evitar atribuir cultivos de una parcela a otra.
 
 Con el corte inicial, el turno de 400 m³ pasa del 26 al 31 de mayo de 2025. Los días de estrés cambian de 0 a 1 en avena, de 0 a 4 en cebada y de 5 a 10 en haba. La avena conserva la preferencia del modelo para forraje. El calendario de riego cada 17 días y el volumen se eligieron para mostrar la sensibilidad del modelo y figuran como supuestos de la demo.
@@ -59,7 +59,9 @@ Con el corte inicial, el turno de 400 m³ pasa del 26 al 31 de mayo de 2025. Los
 | [Open-Meteo](https://open-meteo.com/en/docs) | Pronóstico diario para Cochabamba en America/La_Paz. Los días recientes modelados quedan etiquetados como tal cuando falta IMERG Early. Los datos diarios se mantienen separados del histórico de rotaciones. |
 | [FAO-56](https://www.fao.org/4/x0490e/x0490e0e.htm), [EcoCrop](DatosPlantas/EcoCrop_DB.csv), [SEFO-SAM cebada](https://www.sefosam.com.bo/pdf/cebada.pdf) y [SEFO-SAM haba](https://sefosam.com.bo/pdf/ft-haba.pdf) | Kc, balance, aptitud de referencia, dosis de siembra y rendimientos cuando la fuente lo permite. Las ventanas de la demo son supuestos y el costo local de semilla queda por cotizar. |
 | [OpenStreetMap](https://www.openstreetmap.org/copyright) | Recortes vectoriales de La Maica y Tirani bajo ODbL. |
-| [Foto del valle de 51114u9](https://commons.wikimedia.org/wiki/File:Valle_de_Cochabamba_desde_Cordillera_Tunari.jpg) | Wikimedia Commons, CC BY-SA 4.0, reducida y recortada visualmente en la portada. |
+| [Hogaria](https://hogaria.com/geo) · Ciudatos Lab · OpenStreetMap | Polígonos orientativos del prototipo de Carla, con su atribución ODbL. Se pueden abrir sin conexión. Las coincidencias oficiales se consultan en GAMC. |
+| [Esri World Imagery](https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9) y [Photon](https://photon.komoot.io/) | Teselas satelitales de Esri y colaboradores y búsqueda sobre datos de OpenStreetMap. Se consultan en línea. |
+| [Foto del valle de 51114u9](https://commons.wikimedia.org/wiki/File:Valle_de_Cochabamba_desde_Cordillera_Tunari.jpg) | Wikimedia Commons, CC BY-SA 4.0, reducida y recortada visualmente en la tarjeta del piloto. |
 | [React Bits FadeContent](https://www.reactbits.dev/animations/fade-content) | Adaptación localizada al cambio de escenario con la [licencia de React Bits](src/features/comparison/REACT-BITS-LICENSE.md). Respeta movimiento reducido. |
 
 Procedimiento y estado de cada extracción en [Datos regionales de La Maica](docs/data-import.md). El PDF de planificación se conserva en [InformacionNasa](InformacionNasa/caso-piloto-la-maica.pdf). Los resultados separan estimaciones regionales, previsiones meteorológicas, declaraciones del productor y supuestos.
@@ -73,10 +75,11 @@ Procedimiento y estado de cada extracción en [Datos regionales de La Maica](doc
 
 ## Arquitectura
 
-Una aplicación Next.js App Router en Docker conserva la UI existente con React, TypeScript, Tailwind y shadcn/ui. Las páginas públicas y sus recursos se precargan en el service worker, independiente de IndexedDB y de los adaptadores de servidor. Las APIs dinámicas usan variables del servidor y las respuestas privadas quedan fuera de la caché de la PWA.
+Una aplicación Next.js App Router en Docker integra la navegación, la identidad, la paleta, el mapa de inicio y los controles de [la rama Carla en `a1ae735`](https://github.com/Carlaandrea22/nasaspace_farm/tree/a1ae735b7929e5b599fd6553e2e4727490a12792/prototipo). Los componentes aprovechan React, TypeScript, Tailwind, shadcn/ui, Lucide y DM Sans local. Leaflet renderiza el mapa y los distritos; las calles de los recortes piloto se sirven como vectores locales. El pronóstico y la comparación se alimentan de los módulos del MVP. Las páginas públicas y sus recursos se precargan en el service worker, independiente de IndexedDB y de los adaptadores de servidor. Las APIs dinámicas usan variables del servidor y las respuestas privadas quedan fuera de la caché de la PWA.
 
 | Ruta | Responsabilidad |
 | --- | --- |
+| `src/app/page.tsx`, `src/app/layout.tsx` y `src/components/app-navigation.tsx` | Explorador y navegación con barra inferior en móvil y barra lateral en escritorio. |
 | `src/app/la-maica/` | Piloto y cuatro pantallas enlazadas como invitado. |
 | `src/features/pilot/` y `src/features/territory/` | Formularios, mapa Leaflet, ficha municipal y referencias territoriales. |
 | `src/features/comparison/` | Matriz y gráfico Recharts, escenarios y trazabilidad. |
@@ -84,11 +87,12 @@ Una aplicación Next.js App Router en Docker conserva la UI existente con React,
 | `src/features/operations/` | Pronóstico, etapa del cultivo y ficha de inspección. |
 | `src/server/` y `src/app/api/` | Adaptadores de GAMC y Open-Meteo, con validación y tiempo de espera. |
 | `src/lib/browser/` | Índice de borradores y registro del service worker. |
-| `src/data/` y `public/pilots/` | Series regionales preparadas y recortes públicos de mapa. |
+| `src/data/`, `public/maps/` y `public/pilots/` | Series regionales preparadas, distritos orientativos y recortes públicos de mapa. |
 | `tests/` | Balance, territorio, pronóstico, importación y pruebas en navegador. |
 
 ## Verificación y pendientes
 
+- Integración de la interfaz comprobada en Docker con Chrome a 390 px y 1440 px. Se verificaron la navegación, las teselas satelitales y la búsqueda en vivo, y el centrado con geolocalización emulada. Playwright comprobó que el mapa distrital y los borradores de parcela y cultivo se recuperan sin conexión, que el escenario cambia la fecha del turno sin modificar volumen ni prioridad, que Tirani indica sus faltantes y que la ficha de inspección se descarga con un pronóstico de prueba.
 - GAMC en vivo con las nueve combinaciones de capa y operación `GetMap`, `GetLegendGraphic` y `GetFeatureInfo`. D9 e Itocta y D13 y Tunari devolvieron una coincidencia única. También se verificaron una respuesta ambigua y una sin coincidencias.
 - NASA POWER y SoilGrids regionales comprobados. Open-Meteo respondió con 14 días para La Maica. La ficha de inspección se abrió y descargó con exposición GAMC real de D4 y un pronóstico de prueba de 40 mm. La matriz y su fuente de lluvia aparecen en **¿Por qué?**.
 - IMERG Final y Early quedan pendientes de un subconjunto completo y validado. La consulta de granulos oficiales requiere una sesión Earthdata autorizada y la alternativa pública dio muestras incompletas. AppEEARS requiere acceso autenticado para la extracción SMAP. El importador incluye ambos procedimientos y conserva faltantes distintos de cero.

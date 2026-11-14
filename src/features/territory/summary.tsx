@@ -12,8 +12,8 @@ function lookupText(layer: LayerLookup) {
 export function TerritorySummary({ reference, result }: { reference: ReferenceCase | null; result?: Territory }) {
   const selected = reference ? referenceCases[reference] : null;
   return (
-    <section aria-labelledby="territory-title" className="grid gap-3 border-t border-line pt-5">
-      <h2 id="territory-title" className="font-display text-3xl">Contexto territorial</h2>
+    <section aria-labelledby="territory-title" className="panel grid gap-3">
+      <h2 id="territory-title" className="text-xl font-bold">Contexto territorial</h2>
       {selected && <p className="text-sm text-muted">
         Referencia del piloto: <a href={selected.source} className="underline underline-offset-2">{selected.label}</a>.
         {"coordinatesSource" in selected && <> <a href={selected.coordinatesSource} className="underline underline-offset-2">Fuente del punto</a>.</>}
