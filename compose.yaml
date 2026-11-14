@@ -1,0 +1,15 @@
+name: field-shift
+
+services:
+  app:
+    build: .
+    environment:
+      GAMC_API_KEY: ${GAMC_API_KEY:-}
+    ports:
+      - "127.0.0.1:${FIELD_SHIFT_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/la-maica').then(response => { if (!response.ok) process.exitCode = 1 }).catch(() => { process.exitCode = 1 })"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s

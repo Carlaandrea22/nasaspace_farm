@@ -1,0 +1,110 @@
+[
+  {
+    "code": "2175",
+    "name": "Maíz forrajero",
+    "species": "Zea mays",
+    "use": "forraje",
+    "days": 215,
+    "cycleRange": [
+      65,
+      365
+    ],
+    "temperature": [
+      10.0,
+      18.0,
+      33.0,
+      47.0
+    ],
+    "rainfall": [
+      400.0,
+      600.0,
+      1200.0,
+      1800.0
+    ],
+    "optimalPh": [
+      5.0,
+      7.0
+    ]
+  },
+  {
+    "code": "481",
+    "name": "Avena forrajera",
+    "species": "Avena sativa",
+    "use": "forraje",
+    "days": 190,
+    "cycleRange": [
+      110,
+      270
+    ],
+    "temperature": [
+      5.0,
+      16.0,
+      20.0,
+      30.0
+    ],
+    "rainfall": [
+      250.0,
+      600.0,
+      1000.0,
+      1500.0
+    ],
+    "optimalPh": [
+      5.0,
+      6.0
+    ]
+  },
+  {
+    "code": "1232",
+    "name": "Cebada forrajera",
+    "species": "Hordeum vulgare",
+    "use": "forraje",
+    "days": 165,
+    "cycleRange": [
+      90,
+      240
+    ],
+    "temperature": [
+      2.0,
+      15.0,
+      20.0,
+      40.0
+    ],
+    "rainfall": [
+      200.0,
+      500.0,
+      1000.0,
+      2000.0
+    ],
+    "optimalPh": [
+      6.5,
+      7.5
+    ]
+  },
+  {
+    "code": "2146",
+    "name": "Haba",
+    "species": "Vicia faba",
+    "use": "consumo",
+    "days": 125,
+    "cycleRange": [
+      100,
+      150
+    ],
+    "temperature": [
+      5.0,
+      18.0,
+      28.0,
+      32.0
+    ],
+    "rainfall": [
+      250.0,
+      650.0,
+      1000.0,
+      2600.0
+    ],
+    "optimalPh": [
+      6.0,
+      7.0
+    ]
+  }
+]
