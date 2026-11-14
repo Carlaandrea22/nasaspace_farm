@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { MapPin } from "lucide-react";
 import { useRef, useState, type SubmitEvent } from "react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -17,13 +18,9 @@ const ParcelMap = dynamic(() => import("./parcel-map"), {
 });
 
 export function ParcelForm({ explore = false }: { explore?: boolean }) {
-  const title = explore ? "Explora Cochabamba" : "Mi parcela";
-  const description = explore
-    ? "Toca un distrito para acercarte. Luego toca el terreno para marcar tu parcela."
-    : "Guarda la ubicación y los datos de tu parcela en este dispositivo.";
   return (
-    <div className="py-6 sm:py-9">
-      <DraftHeader title={title} description={description} />
+    <div className={explore ? "pb-6" : "py-6 sm:py-9"}>
+      {!explore && <DraftHeader title="Mi parcela" description="Guarda la ubicación y los datos de tu parcela en este dispositivo." />}
       <DraftForm>
         {(draft, save, status, markEdited) => (
           <ParcelFields parcel={draft?.parcel} explore={explore} save={(parcel) => save({ parcel })} status={status} markEdited={markEdited} />
@@ -105,20 +102,35 @@ function ParcelFields({ parcel, explore, save, status, markEdited }: { parcel?: 
   return (
     <div className="grid gap-6">
       <div className={explore ? "grid gap-6" : "grid items-start gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]"}>
-        <section aria-labelledby="map-title" className="min-w-0">
-          <div className={explore ? "sr-only" : "mb-3 flex flex-wrap items-center justify-between gap-2"}>
-            <h2 id="map-title" className="text-xl font-bold">Mapa de referencia</h2>
-            {!explore && <Button type="button" variant="secondary" aria-controls="parcel-map" aria-expanded={mapOpen} onClick={() => setMapOpen(!mapOpen)}>{mapOpen ? "Ocultar mapa" : "Abrir mapa"}</Button>}
-          </div>
+        <section aria-labelledby="map-title" className={explore ? "map-section" : "min-w-0"}>
+          {explore ? (
+            <header className="map-section-heading">
+              <span className="map-emblem"><MapPin size={22} aria-hidden="true" /></span>
+              <div>
+                <h2 id="map-title">Encuentra tu parcela</h2>
+                <p>Busca una dirección o elige un distrito para acercarte.</p>
+              </div>
+            </header>
+          ) : (
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h2 id="map-title" className="text-xl font-bold">Mapa de referencia</h2>
+              <Button type="button" variant="secondary" aria-controls="parcel-map" aria-expanded={mapOpen} onClick={() => setMapOpen(!mapOpen)}>{mapOpen ? "Ocultar mapa" : "Abrir mapa"}</Button>
+            </div>
+          )}
           <div id="parcel-map" hidden={!mapOpen}>
             {mapOpen && <ParcelMap overview={explore} selected={selected} onSelect={selectPoint} onView={setView} />}
           </div>
+          {explore && <div className="map-selected">
+            <span className="map-emblem"><MapPin size={22} aria-hidden="true" /></span>
+            <span role="status">{selected ? `${selected.latitude.toFixed(5)}, ${selected.longitude.toFixed(5)}` : "Selecciona un punto del mapa"}</span>
+            {selected && <Button asChild variant="secondary" className="sm:ml-auto"><a href="#clima-parcela">Ver clima y cultivos</a></Button>}
+          </div>}
           {!mapOpen && <p className="text-sm text-muted">Puedes consultar o editar las coordenadas sin abrir el mapa.</p>}
           <div className="mt-3 flex flex-wrap items-center gap-2" aria-label="Casos de referencia" role="group">
             {Object.entries(referenceCases).map(([key, option]) => (
               <Button key={key} type="button" variant="secondary" aria-pressed={reference === key} className="aria-pressed:border-action aria-pressed:bg-leaf" onClick={() => selectPoint(option)}>{option.label}</Button>
             ))}
-            {selected && <Button asChild variant="secondary"><a href="#clima-parcela">Ver clima y cultivos</a></Button>}
+            {!explore && selected && <Button asChild variant="secondary"><a href="#clima-parcela">Ver clima y cultivos</a></Button>}
           </div>
         </section>
         <section aria-labelledby="parcel-fields" className="panel">

@@ -2,7 +2,7 @@
 
 import type { FeatureCollection, GeoJsonObject, MultiPolygon, Polygon } from "geojson";
 import * as L from "leaflet";
-import { Crosshair, LocateFixed, MapPin } from "lucide-react";
+import { LocateFixed, Map as MapIcon, MapPin } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
 import { NativeSelect } from "../../components/ui/native-select";
@@ -52,6 +52,10 @@ export default function ParcelMap({ selected, onSelect, onView, overview }: MapP
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const marker = useRef<L.CircleMarker | null>(null);
+  const gps = useRef<L.LayerGroup | null>(null);
+  const manualAction = useRef(0);
+  const districtBounds = useRef(new Map<string, L.LatLngBounds>());
+  const focusedDistrict = useRef("");
   const [districts, setDistricts] = useState<District[]>([]);
   const [district, setDistrict] = useState("");
   const [showDistricts, setShowDistricts] = useState(true);
@@ -60,10 +64,12 @@ export default function ParcelMap({ selected, onSelect, onView, overview }: MapP
   const [satellite, setSatellite] = useState(overview);
   const [satelliteError, setSatelliteError] = useState(false);
   const [locationStatus, setLocationStatus] = useState("");
+  const [locating, setLocating] = useState(false);
   const [baseResult, setBaseResult] = useState<{ region: string; status: "ready" | "error" }>();
   const [layer, setLayer] = useState<TerritoryLayer | "">("");
   const [overlayError, setOverlayError] = useState(false);
   const select = useEffectEvent((coords: Coordinates) => onSelect(coords));
+  const focus = useEffectEvent((code: string) => focusDistrict(code));
   const initialPoint = useEffectEvent(() => selected);
   const updateView = useEffectEvent((map: L.Map) => onView(currentView(map)));
   const region = selected ? pilotRegion(selected) : "custom";
@@ -76,8 +82,9 @@ export default function ParcelMap({ selected, onSelect, onView, overview }: MapP
     const initial = initialPoint();
     const map = L.map(container.current, {
       maxBounds: cityBounds,
-      maxBoundsViscosity: 0.8,
-      minZoom: 12,
+      maxBoundsViscosity: 1,
+      zoomSnap: 0.25,
+      minZoom: 11.5,
       maxZoom: 18,
       scrollWheelZoom: false,
       zoomAnimation: false,
@@ -88,7 +95,7 @@ export default function ParcelMap({ selected, onSelect, onView, overview }: MapP
     map.createPane("districts").style.zIndex = "425";
     map.createPane("territory").style.zIndex = "440";
     map.createPane("parcel-point").style.zIndex = "450";
-    L.control.zoom({ position: "topright", zoomInTitle: "Acercar mapa", zoomOutTitle: "Alejar mapa" }).addTo(map);
+    L.control.zoom({ position: "bottomright", zoomInTitle: "Acercar mapa", zoomOutTitle: "Alejar mapa" }).addTo(map);
     L.control.scale({ imperial: false }).addTo(map);
     map.attributionControl.setPrefix(false);
     marker.current = L.circleMarker(initial ? point(initial) : city, {
@@ -97,9 +104,13 @@ export default function ParcelMap({ selected, onSelect, onView, overview }: MapP
       interactive: false, pane: "parcel-point",
     }).addTo(map);
 
-    map.on("click", ({ latlng }: L.LeafletMouseEvent) => select({ latitude: latlng.lat, longitude: latlng.lng }));
+    map.on("dragstart zoomstart", () => { manualAction.current += 1; });
+    map.on("click", ({ latlng }: L.LeafletMouseEvent) => {
+      manualAction.current += 1;
+      select({ latitude: latlng.lat, longitude: latlng.lng });
+    });
     function updateLabels() {
-      map.getContainer().classList.toggle("hide-district-labels", map.getZoom() >= 14);
+      map.getContainer().classList.toggle("hide-district-labels", map.getZoom() >= 13.5);
     }
     map.on("zoomend", updateLabels);
     updateLabels();
@@ -116,6 +127,7 @@ export default function ParcelMap({ selected, onSelect, onView, overview }: MapP
       window.removeEventListener("offline", onNetwork);
       resize.disconnect();
       marker.current = null;
+      gps.current = null;
       mapRef.current = null;
       map.remove();
     };
@@ -144,15 +156,16 @@ export default function ParcelMap({ selected, onSelect, onView, overview }: MapP
             const info = feature.properties;
             const highlighted = primaryDistricts.has(info.codigo_distrito);
             const shape = layer as L.Polygon;
+            districtBounds.current.set(info.codigo_distrito, shape.getBounds());
             const label = document.createElement("span");
             label.textContent = "D" + info.codigo_distrito;
             shape.options.bubblingMouseEvents = false;
             shape.bindTooltip(label, { direction: "center", permanent: true, interactive: false, className: "district-label" + (highlighted ? " priority-district" : "") });
             shape.on("click", ({ latlng }: L.LeafletMouseEvent) => {
-              if (map.getZoom() < 14) {
-                setDistrict(info.codigo_distrito);
-                map.setView([info.latitud, info.longitud], 14, { animate: false });
+              if (map.getZoom() < 13.5 && focusedDistrict.current !== info.codigo_distrito) {
+                focus(info.codigo_distrito);
               } else {
+                manualAction.current += 1;
                 select({ latitude: latlng.lat, longitude: latlng.lng });
               }
             });
@@ -225,6 +238,7 @@ export default function ParcelMap({ selected, onSelect, onView, overview }: MapP
       marker.current.setStyle({ opacity: 0, fillOpacity: 0 });
       return;
     }
+    manualAction.current += 1;
     const latlng: L.LatLngTuple = [latitude, longitude];
     marker.current.setLatLng(latlng).setStyle({ opacity: 1, fillOpacity: 1 });
     const reference = getReferenceCase(latitude, longitude);
@@ -256,10 +270,24 @@ export default function ParcelMap({ selected, onSelect, onView, overview }: MapP
 
   function focusDistrict(code: string) {
     setDistrict(code);
+    focusedDistrict.current = code;
     const map = mapRef.current;
     if (!map) return;
-    const info = districts.find((item) => item.codigo_distrito === code);
-    map.setView(info ? [info.latitud, info.longitud] : city, info ? 14 : 12, { animate: false });
+    manualAction.current += 1;
+    const bounds = districtBounds.current.get(code);
+    if (bounds) map.fitBounds(bounds, { padding: [24, 24], maxZoom: 16, animate: false });
+    else map.setView(city, 12, { animate: false });
+  }
+
+  function locatePlace(coords: Coordinates) {
+    manualAction.current += 1;
+    setDistrict("");
+    focusedDistrict.current = "";
+    onSelect(coords);
+    const map = mapRef.current;
+    if (!map) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) map.setView(point(coords), 17, { animate: false });
+    else map.flyTo(point(coords), 17, { duration: 0.55 });
   }
 
   function locate() {
@@ -268,32 +296,45 @@ export default function ParcelMap({ selected, onSelect, onView, overview }: MapP
       setLocationStatus("La ubicación no está disponible en este navegador.");
       return;
     }
+    const requestVersion = manualAction.current;
+    setLocating(true);
     setLocationStatus("Buscando tu ubicación…");
     navigator.geolocation.getCurrentPosition(({ coords }) => {
       if (mapRef.current !== map) return;
+      setLocating(false);
       const position: L.LatLngTuple = [coords.latitude, coords.longitude];
       if (!cityBounds.contains(position)) {
         setLocationStatus("Tu ubicación está fuera de la vista de Cochabamba.");
         return;
       }
-      map.setView(position, 16, { animate: false });
-      setLocationStatus("Vista centrada. Toca el mapa o elige «Marcar centro» para seleccionar el punto.");
+      gps.current?.remove();
+      gps.current = L.layerGroup([
+        L.circle(position, { radius: coords.accuracy, color: "#60a5fa", weight: 1, interactive: false }),
+        L.circleMarker(position, { radius: 8, color: "white", weight: 3, fillColor: "#2563eb", fillOpacity: 1, interactive: false }),
+      ]).addTo(map);
+      if (manualAction.current === requestVersion) map.setView(position, coords.accuracy < 100 ? 17 : 15, { animate: false });
+      setLocationStatus("El punto azul indica tu ubicación aproximada. Toca el terreno para elegir tu parcela.");
     }, () => {
-      if (mapRef.current === map) setLocationStatus("No se pudo obtener tu ubicación. Puedes marcar un punto a mano.");
+      if (mapRef.current !== map) return;
+      setLocating(false);
+      setLocationStatus("No se pudo obtener tu ubicación. Puedes marcar un punto a mano.");
     }, { timeout: 8000, maximumAge: 60000 });
   }
 
   return (
-    <div className="panel">
-      <div className="mb-3 grid gap-3 sm:grid-cols-2">
-        <div className="grid content-start gap-1">
-          <label className="text-sm font-semibold" htmlFor="district-selector">Distrito</label>
+    <div className={overview ? "map-distribution" : "panel"}>
+      <div className={overview ? "map-controls" : "mb-3 grid gap-3 sm:grid-cols-2"}>
+        <div className="grid min-w-0 content-start gap-1">
+          <label className="map-control-label" htmlFor="district-selector"><MapIcon size={20} aria-hidden="true" /> Selecciona tu distrito</label>
           <NativeSelect id="district-selector" value={district} onChange={(event) => focusDistrict(event.target.value)}>
             <option value="">Todo Cochabamba</option>
             {districts.map((info) => <option key={info.codigo_distrito} value={info.codigo_distrito}>{info.nombre}</option>)}
           </NativeSelect>
         </div>
-        {overview && <PlaceSearch bounds={cityBounds} online={online} onLocate={(coords) => mapRef.current?.setView(point(coords), 16, { animate: false })} />}
+        {overview && <>
+          <div className="map-separator" aria-hidden="true">o</div>
+          <PlaceSearch bounds={cityBounds} online={online} onLocate={locatePlace} />
+        </>}
         {!overview && <div className="grid content-start gap-1">
           <label className="text-sm font-semibold" htmlFor="gamc-layer-selector">Capa GAMC</label>
           <NativeSelect id="gamc-layer-selector" value={layer} onChange={(event) => {
@@ -304,40 +345,39 @@ export default function ParcelMap({ selected, onSelect, onView, overview }: MapP
             {Object.entries(layerNames).map(([key, name]) => <option key={key} value={key}>{name}</option>)}
           </NativeSelect>
         </div>}
+        <Button type="button" className="map-location" onClick={locate} disabled={locating}><LocateFixed size={20} aria-hidden="true" /> Usar mi ubicación</Button>
+        {locationStatus && <p className="text-sm text-muted" role="status">{locationStatus}</p>}
       </div>
-      <div className="relative isolate overflow-hidden rounded-xl">
-        <div
-          ref={container}
-          role="region"
-          aria-label={overview ? "Mapa de Cochabamba" : region === "la-maica" ? "Mapa de La Maica" : region === "tunari" ? "Mapa de Tirani" : "Mapa de la parcela"}
-          data-overview={overview}
-          className="parcel-viewport"
-        />
-        <Crosshair size={22} aria-hidden="true" className="pointer-events-none absolute top-1/2 left-1/2 z-[410] -translate-x-1/2 -translate-y-1/2 text-white drop-shadow-[0_1px_2px_#173c30]" />
-        <div className="absolute top-2.5 left-2.5 z-[500] flex flex-col items-start gap-1.5">
-          <Button type="button" variant="secondary" className="parcel-map-action" onClick={locate}><LocateFixed size={17} aria-hidden="true" /> Mi ubicación</Button>
-          <Button type="button" variant="secondary" className="parcel-map-action" onClick={() => {
+      <div className="min-w-0">
+        <div className="isolate overflow-hidden rounded-[22px]">
+          <div
+            ref={container}
+            role="region"
+            aria-label={overview ? "Mapa de Cochabamba" : region === "la-maica" ? "Mapa de La Maica" : region === "tunari" ? "Mapa de Tirani" : "Mapa de la parcela"}
+            data-overview={overview}
+            className="parcel-viewport"
+          />
+        </div>
+        <div className="mt-1 flex flex-wrap gap-x-4 text-sm font-semibold">
+          <label className="inline-flex min-h-11 items-center gap-1.5"><input type="checkbox" className="size-4 accent-action" checked={showDistricts} onChange={(event) => setShowDistricts(event.target.checked)} /> Distritos</label>
+          <label className="inline-flex min-h-11 items-center gap-1.5"><input type="checkbox" className="size-4 accent-action" checked={satellite && online} disabled={!online} onChange={(event) => {
+            setSatelliteError(false);
+            setSatellite(event.target.checked);
+          }} /> Satélite</label>
+          <Button type="button" variant="secondary" className="sm:ml-auto" onClick={() => {
             const center = mapRef.current?.getCenter();
             if (center) onSelect({ latitude: center.lat, longitude: center.lng });
           }}><MapPin size={17} aria-hidden="true" /> Marcar centro</Button>
         </div>
+        {showDistricts && !districtError && <p className="mt-1 text-xs text-muted">D9, D13 y D15 resaltados. Confirma el distrito de tu parcela con GAMC.</p>}
+        {districtError && showDistricts && <p role="status" className="mt-2 text-sm text-muted">No se pudieron cargar los distritos de referencia.</p>}
+        {satellite && (!online || satelliteError) && <p role="status" className="mt-2 text-sm text-muted">Imágenes satelitales no disponibles. El mapa local sigue activo.</p>}
+        {layer && <p className="mt-1 text-sm text-muted"><a className="underline" target="_blank" rel="noreferrer" href={`/api/territory?operation=legend&layer=${layer}`}>Abrir leyenda de {layerNames[layer]}</a></p>}
+        {overlayError && layer && <p role="status" className="mt-2 text-sm text-muted">Capa GAMC no disponible en este momento.</p>}
+        {region !== "custom" && baseStatus !== "ready" && <p role="status" className="mt-2 text-sm text-muted">
+          {baseStatus === "loading" ? "Cargando el mapa base…" : "Mapa base no disponible. Puedes ingresar las coordenadas en el formulario."}
+        </p>}
       </div>
-      <div className="mt-1 flex flex-wrap gap-x-4 text-sm font-semibold">
-        <label className="inline-flex min-h-11 items-center gap-1.5"><input type="checkbox" className="size-4 accent-action" checked={showDistricts} onChange={(event) => setShowDistricts(event.target.checked)} /> Distritos</label>
-        <label className="inline-flex min-h-11 items-center gap-1.5"><input type="checkbox" className="size-4 accent-action" checked={satellite && online} disabled={!online} onChange={(event) => {
-          setSatelliteError(false);
-          setSatellite(event.target.checked);
-        }} /> Satélite</label>
-      </div>
-      {showDistricts && !districtError && <p className="mt-1 text-xs text-muted">D9, D13 y D15 resaltados. Confirma el distrito de tu parcela con GAMC.</p>}
-      {locationStatus && <p className="mt-2 text-sm text-muted" role="status">{locationStatus}</p>}
-      {districtError && showDistricts && <p role="status" className="mt-2 text-sm text-muted">No se pudieron cargar los distritos de referencia.</p>}
-      {satellite && (!online || satelliteError) && <p role="status" className="mt-2 text-sm text-muted">Imágenes satelitales no disponibles. El mapa local sigue activo.</p>}
-      {layer && <p className="mt-1 text-sm text-muted"><a className="underline" target="_blank" rel="noreferrer" href={`/api/territory?operation=legend&layer=${layer}`}>Abrir leyenda de {layerNames[layer]}</a></p>}
-      {overlayError && layer && <p role="status" className="mt-2 text-sm text-muted">Capa GAMC no disponible en este momento.</p>}
-      {region !== "custom" && baseStatus !== "ready" && <p role="status" className="mt-2 text-sm text-muted">
-        {baseStatus === "loading" ? "Cargando el mapa base…" : "Mapa base no disponible. Puedes ingresar las coordenadas en el formulario."}
-      </p>}
     </div>
   );
 }

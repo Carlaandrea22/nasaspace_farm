@@ -25,7 +25,7 @@ type Scenario = NonNullable<ReturnType<typeof prepareScenario>>;
 export function Comparison() {
   return (
     <div className="py-8 sm:py-10">
-      <DraftHeader title="¿Qué siembro después?" description="Compara tres rotaciones y revisa cómo cambia el agua disponible si se retrasa el mismo turno." />
+      <DraftHeader cover="crops" title="¿Qué siembro después?" description="Compara tres rotaciones y revisa cómo cambia el agua disponible si se retrasa el mismo turno." />
       <DraftForm>{(draft) => <ComparisonContent draft={draft} />}</DraftForm>
     </div>
   );

@@ -45,9 +45,9 @@ export function DraftForm({ children }: { children: (draft: PilotDraft | undefin
   return children(draft.value, save, status, markEdited);
 }
 
-export function DraftHeader({ title, description }: { title: string; description: string }) {
+export function DraftHeader({ title, description, cover }: { title: string; description: string; cover?: "water" | "crops" }) {
   return (
-    <header className="mb-5 sm:mb-7">
+    <header className={cover ? "section-cover" : "mb-5 sm:mb-7"} data-cover={cover}>
       <h1>{title}</h1>
       <p className="intro">{description}</p>
     </header>

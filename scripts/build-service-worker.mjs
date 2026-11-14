@@ -13,6 +13,8 @@ const browserAssets = [
   "/icons/field-shift-192.png",
   "/icons/field-shift-512.png",
   "/images/valle-cochabamba.jpg",
+  "/images/carla-valle.webp",
+  "/images/carla-cultivos.jpg",
   "/maps/cochabamba-distritos.geojson",
   "/pilots/la-maica/contexto-osm.geojson",
   "/pilots/tunari/contexto-osm.geojson",

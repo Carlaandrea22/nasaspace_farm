@@ -1,10 +1,20 @@
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, MapPin } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { ParcelForm } from "../features/pilot/parcel-form";
 
 export default function HomePage() {
   return (
     <div className="pb-5">
+      <header className="field-hero">
+        <div className="field-hero-copy">
+          <p className="field-hero-place"><MapPin size={16} aria-hidden="true" /> Cochabamba, Bolivia</p>
+          <h1>Tu parcela,<br className="hidden sm:block" /> a la vista.</h1>
+          <p>Ubica tu terreno, revisa el agua y compara qué sembrar en la próxima campaña.</p>
+        </div>
+        <div className="field-hero-photos" aria-hidden="true">
+          <div /><div />
+        </div>
+      </header>
       <ParcelForm explore />
       <section className="pilot-card" aria-labelledby="demo-title">
         <p className="text-sm font-semibold text-leaf">Piloto · D9 / Itocta</p>

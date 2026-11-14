@@ -288,7 +288,7 @@ function ForecastPanel({ parcel, cropWater }: { parcel?: Parcel; cropWater?: Cro
 export function NextTurn() {
   return (
     <div className="py-8 sm:py-10">
-      <DraftHeader title="Mi próximo turno" description="Revisa la lluvia y el pronóstico antes de confirmar tu turno de riego." />
+      <DraftHeader cover="water" title="Mi próximo turno" description="Consulta la lluvia esperada antes de regar." />
       <DraftForm>{(draft) => <ForecastPanel parcel={draft?.parcel} cropWater={cropForParcel(draft)} />}</DraftForm>
     </div>
   );

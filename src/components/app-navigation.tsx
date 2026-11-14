@@ -17,7 +17,7 @@ export function AppNavigation() {
     <nav className="app-navigation" aria-label="Navegación principal">
       {destinations.map(({ label, href, icon: Icon }) => (
         <a key={href} href={href} aria-current={href === current ? "page" : undefined}>
-          <Icon size={21} aria-hidden="true" />
+          <span className="nav-icon"><Icon size={19} aria-hidden="true" /></span>
           <span>{label}</span>
         </a>
       ))}

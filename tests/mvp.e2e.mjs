@@ -14,6 +14,12 @@ test("el invitado guarda su parcela, compara escenarios y reabre el MVP sin red"
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
     const page = await context.newPage();
     page.setDefaultTimeout(9000);
+    await context.route("https://photon.komoot.io/api/**", (route) => route.fulfill({
+      headers: { "access-control-allow-origin": "*" },
+      json: { type: "FeatureCollection", features: [
+        { type: "Feature", geometry: { type: "Point", coordinates: [-66.1569, -17.3936] }, properties: { name: "Plaza 14 de Septiembre", city: "Cochabamba" } },
+      ] },
+    }));
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
     const save = async () => {
@@ -23,11 +29,20 @@ test("el invitado guarda su parcela, compara escenarios y reabre el MVP sin red"
     await page.goto(origin);
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
     const nav = page.getByRole("navigation", { name: "Navegación principal" });
-    await page.getByRole("heading", { name: "Explora Cochabamba" }).waitFor();
+    await page.getByRole("heading", { name: "Tu parcela, a la vista." }).waitFor();
+    await page.getByRole("heading", { name: "Encuentra tu parcela" }).waitFor();
     assert.equal(await nav.getByRole("link", { name: "Explorar" }).getAttribute("aria-current"), "page");
     const map = page.getByRole("region", { name: "Mapa de Cochabamba" });
     await map.locator(".leaflet-districts-pane path").first().waitFor({ state: "attached" });
-    await page.getByLabel("Distrito", { exact: true }).selectOption("9");
+    const places = page.getByRole("combobox", { name: "Buscar dirección o lugar" });
+    await places.fill("Plaza 14");
+    await page.getByRole("option", { name: /Plaza 14 de Septiembre/ }).waitFor();
+    await places.press("ArrowDown");
+    await places.press("Enter");
+    assert.equal(await page.getByLabel("Latitud").inputValue(), "-17.39360");
+    await page.getByText("-17.39360, -66.15690", { exact: true }).waitFor();
+    await page.getByRole("link", { name: "Ver clima y cultivos" }).waitFor();
+    await page.getByRole("combobox", { name: "Selecciona tu distrito" }).selectOption("9");
     await page.getByRole("button", { name: "Marcar centro" }).click();
     assert.match(await page.getByLabel("Latitud").inputValue(), /^-17\./);
     await page.getByRole("button", { name: "La Maica · D9 / Itocta" }).click();
@@ -71,6 +86,8 @@ test("el invitado guarda su parcela, compara escenarios y reabre el MVP sin red"
     await map.locator(".leaflet-districts-pane path").first().waitFor({ state: "attached" });
     await page.getByText("Imágenes satelitales no disponibles. El mapa local sigue activo.").waitFor();
     assert.ok(await page.getByRole("checkbox", { name: "Satélite" }).isDisabled());
+    assert.ok(await places.isDisabled());
+    assert.equal(await page.evaluate(async () => Boolean(await caches.match("/images/carla-valle.webp"))), true);
     await nav.getByRole("link", { name: "Mis parcelas" }).click();
     assert.equal(await page.getByLabel("Nombre de la parcela (opcional)").inputValue(), "Parcela de prueba");
     assert.equal(await page.getByLabel("Superficie (ha, opcional)").inputValue(), "1.5");
