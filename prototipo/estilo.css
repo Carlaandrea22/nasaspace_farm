@@ -1,0 +1,50 @@
+:root{font-family:"Atkinson Hyperlegible Next",system-ui,sans-serif;background:#f5f4eb;color:#18342a;line-height:1.5}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0}
+button,input,select{font:inherit}
+button,select,summary,input{cursor:pointer}
+:focus-visible{outline:3px solid #ad551c;outline-offset:3px}
+.barra{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:15px max(20px,calc((100vw - 760px)/2));background:#173c30;color:#fff}
+.marca{font-weight:800;font-size:1.15rem;display:block}
+.lugar{font-size:.82rem;color:#d4e8d8}
+.demo,.estado{font-weight:700;border-radius:30px;padding:4px 10px;font-size:.8rem;background:#f6df9a;color:#3d3315;white-space:nowrap}
+main{width:min(100%,800px);margin:auto;padding:28px 20px 115px}
+h1,h2,h3,p{margin:0 0 10px}
+h1{font-size:clamp(2.15rem,7vw,3.25rem);line-height:1.07;letter-spacing:-.045em}
+h2{font-size:1.3rem;line-height:1.25}
+.contexto{font-size:.75rem;letter-spacing:.09em;font-weight:800;color:#426956}
+.accion{background:#23503d;color:#fff;border-radius:24px;padding:24px;margin:20px 0 16px}
+.accion h2{margin-top:14px;font-size:clamp(1.55rem,5vw,2.3rem)}
+.accion p{max-width:49ch;color:#ecf5ea}
+button{min-height:46px;border:0;border-radius:12px;color:inherit}
+.claro,#instalar{background:#dbefae;color:#173c30;padding:10px 14px;font-weight:800}
+.claro{margin-top:10px}
+.accesos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.accesos button,.tarjeta{background:#fffdf7;border:1px solid #d9e2d2;border-radius:17px;text-align:left;padding:16px}
+.accesos strong,.accesos small{display:block}
+.accesos small{margin-top:4px;color:#466356}
+.tarjeta{margin:14px 0}
+.tarjeta p:last-child{margin-bottom:0}
+.dato{font-size:2rem}
+.selector,.capas{border:0;padding:0;margin:14px 0}
+legend,.campo{font-weight:700}
+.selector label,.capas label,.opcion{display:inline-flex;align-items:center;min-height:44px;margin-right:12px;gap:6px}
+input{accent-color:#25583e;width:18px;height:18px}
+.campo{display:block;margin:12px 0}
+.campo select{display:block;width:100%;padding:11px;border:1px solid #9cb1a0;border-radius:12px;background:#fffdf7;color:inherit;margin-top:5px}
+.opcion{display:flex}
+.destacada{border:2px solid #547849}
+summary{font-weight:700;min-height:44px;padding:9px 0}
+.navegacion{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:center;background:#fffdf7;border-top:1px solid #d9e2d2;padding:6px 4px calc(6px + env(safe-area-inset-bottom));z-index:2}
+.navegacion button{background:transparent;flex:1 1 0;max-width:155px;font-size:.78rem;font-weight:750}
+.navegacion span{display:block;font-size:1.35rem;line-height:1.15}
+.navegacion [aria-current]{background:#dfead2}
+.mapa{height:250px;position:relative;overflow:hidden;isolation:isolate;border:1px solid #bdcbb6;border-radius:16px;background:repeating-linear-gradient(120deg,#e5eccf 0 22px,#e9efd8 22px 45px);margin-top:14px}
+.distrito,.zona,.canal,.pin{position:absolute}
+.distrito{inset:10% 10% 12% 14%;border:2px dashed #879d71;border-radius:20% 32% 16% 26%;padding:12px}
+.zona{inset:33% 14% 8% 38%;background:#d6bd762f;border:2px dotted #946e2e;clip-path:polygon(0 12%,100% 0,100% 87%,17% 100%)}
+.canal{height:30px;width:125%;left:-10%;top:64%;background:#b0d9de;border-top:3px solid #377c8b;transform:rotate(-15deg)}
+.pin{left:35%;top:33%;background:#173c30;color:white;padding:6px 10px}
+.aviso{border-left:5px solid #b57a32}
+@media(max-width:420px){.accesos{grid-template-columns:1fr}.barra{padding-inline:16px}main{padding-inline:16px}}

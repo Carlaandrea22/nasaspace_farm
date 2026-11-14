@@ -1,0 +1,80 @@
+.cabecera{padding-inline:max(20px,calc((100vw - 1120px)/2))}
+.identidad,.contexto,.pin,.claro,.capas legend{display:flex;align-items:center;gap:8px}
+.emblema{display:grid;place-items:center;background:#d8ebaa;color:#173c30;border-radius:13px;width:40px;height:40px}
+.marco{max-width:1160px;margin:auto}
+.subtitulo{color:#53685c}
+.accion{background:linear-gradient(130deg,#173c30,#2e5d43 80%);padding:clamp(22px,5vw,38px)}
+.accion h2{max-width:20ch}
+.accesos svg{margin-bottom:7px}
+.navegacion button{display:grid;place-content:center;justify-items:center;gap:4px;padding:9px 4px}
+.segmentos{display:flex;gap:8px;margin:12px 0}
+.segmentos button{padding:8px 20px;background:#e7ebdd}
+.segmentos [aria-pressed=true]{background:#173c30;color:#fff}
+.metricas{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}
+.metricas strong,.metricas small{display:block}
+.metricas strong{font-size:1.15rem}
+.metricas small{color:#53685c}
+@media(min-width:880px){
+  .marco{display:grid;grid-template-columns:205px 1fr;align-items:start}
+  .navegacion{position:sticky;top:20px;flex-direction:column;border:0;background:transparent;gap:4px;margin-top:19px;padding:8px}
+  .navegacion button{max-width:none;display:flex;align-items:center;gap:12px;font-size:.95rem;padding:12px 16px;flex:auto}
+  main{padding:40px 30px 60px}
+}
+.cuenta,.guardar,.resumen{display:flex;align-items:center;gap:10px}
+:root{background:#f3f6ef;color:#203020;font-family:"DM Sans",system-ui,sans-serif}
+.cabecera{background:#f8faf5;color:#203020;border-bottom:1px solid #dde5d7}
+.lugar,.subtitulo,.metricas small{color:#51624e}
+.emblema{background:#d9edc0;color:#294125;flex:none}
+.cuenta,.guardar{justify-content:center;background:#e3efd9;color:#263d22;font-weight:750;padding:10px 14px}
+.ubicacion{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:14px}
+.ubicacion p{margin:0}
+.contexto{color:#45633a}
+.demo{background:#e4eddd;color:#354c2c}
+.accion{margin-top:0;min-height:330px;display:flex;flex-direction:column;justify-content:flex-end;align-items:flex-start;
+  background:linear-gradient(0deg,#172511 4%,#1d3019bc 48%,#21351a1f 100%),url("/cultivos.jpg") center 48%/cover}
+.accion h1{font-size:clamp(2.3rem,6vw,4.5rem);max-width:13ch}
+.accion p{color:#f4faef}
+.claro{background:#b9e48e;color:#20351b}
+.resumen,.accesos button,.tarjeta,.navegacion{background:#fcfdf9;border-color:#dce6d6}
+.resumen h2{margin:0;font-size:1.05rem}
+.resumen p{color:#51624e}
+.accesos small{color:#51624e}
+.navegacion [aria-current],.segmentos [aria-pressed=true]{background:#d8ebc9;color:#233b20}
+.guardar{margin-top:14px}
+.mapa{background:linear-gradient(#293d2b30,#293d2b48),url("/cultivos.jpg") center/cover}
+.distrito{color:white;border-color:#d9edc0;background:#20351b62}
+.zona{background:#c6ef9875;border-color:#d9edc0}
+.pin{background:#223a20}
+.aviso{border-left-color:#758c58}
+.acceso{position:fixed;width:min(440px,calc(100% - 32px));padding:26px;border:1px solid #dce6d6;border-radius:24px;background:#fcfdf9;color:#203020;box-shadow:0 24px 80px #14231446}
+.acceso::backdrop{background:#192b1bc0}
+.acceso h2{margin-top:14px;font-size:1.6rem}
+.cerrar{position:absolute;right:12px;top:12px;background:transparent;display:grid;place-items:center;width:46px}
+@media(max-width:520px){.accion{min-height:360px}.navegacion button{font-size:.68rem}.cuenta{font-size:.82rem}}
+
+.visor{position:relative;isolation:isolate;margin-top:16px}
+.visor-mapa{height:clamp(350px,61dvh,670px);border-radius:18px;background:#344e36}
+.visor-botones{position:absolute;z-index:1000;top:12px;right:12px;display:flex;flex-direction:column;align-items:end;gap:8px}
+.visor-botones button{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#fcfdf9;color:#203020;font-weight:750;box-shadow:0 2px 10px #0003}
+.visor-opciones{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:10px 0}
+.visor-opciones label{display:flex;align-items:center;gap:6px;min-height:44px}
+.nombre-distrito.leaflet-tooltip{background:#203020df;color:#fff;border:none;box-shadow:none}
+
+.nombre-distrito.distrito-prioritario.leaflet-tooltip{background:#d4ff8c;color:#203020;font-weight:800}
+.leyenda-distritos{display:flex;flex-wrap:wrap;gap:6px 16px;margin:8px 0 12px;font-size:.84rem}
+.leyenda-distritos span{display:inline-flex;align-items:center;gap:6px}
+.leyenda-distritos i{width:14px;height:14px;border:1px solid #657662;border-radius:3px}
+.leyenda-distritos .muestra-prioritaria{background:#d4ff8c;border-color:#476731}
+.leyenda-distritos small{flex-basis:100%;color:#51624e}
+
+.selectores-mapa{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,235px),1fr));gap:0 16px}
+.selectores-mapa small{display:block;color:#51624e;font-weight:400;margin-top:4px}
+.mapa-en-detalle .nombre-distrito.leaflet-tooltip{display:none}
+.mapa-en-detalle .leaflet-overlay-pane path[fill="#9cf94d"]{fill-opacity:0;stroke:#eef1dc;stroke-width:1.5}
+
+.buscador-mapa{display:flex;gap:8px;margin-top:5px}
+.buscador-mapa input{width:100%;min-width:0;height:46px;padding:10px;border:1px solid #9cb1a0;border-radius:12px;background:#fffdf7;color:inherit}
+.resultados-mapa{list-style:none;padding:0;margin:0 0 12px;display:grid;gap:4px}
+.resultados-mapa button{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:8px 12px;background:#fcfdf9;border:1px solid #dce6d6}
+.resultados-mapa svg{flex:none}
+.visor-opciones{flex-wrap:wrap}
