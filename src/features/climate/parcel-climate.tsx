@@ -1,0 +1,155 @@
+"use client";
+
+import { Sprout, ThermometerSun } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import { NativeSelect } from "../../components/ui/native-select";
+import { ensoSource, hasEnsoCoverage, relevantEnso, type EnsoOutlook } from "../../domain/climate/enso";
+import { ecocropSource, powerSource, rankCrops, type ClimateProfile, type CropUse } from "../../domain/climate/screening";
+import { localDate } from "../operations/model";
+import { decimal, type Coordinates } from "../pilot/draft";
+import { EnsoAttribution, labelMonth, seasonLabel, useEnso } from "./enso-outlook";
+
+const climateKey = "field-shift-climate-v2";
+const number = new Intl.NumberFormat("es-BO", { maximumFractionDigits: 1 });
+
+function metric(value: number | null, unit: string) {
+  return value === null ? "Sin dato" : `${number.format(value)} ${unit}`;
+}
+
+function monthOptions() {
+  const [year, month] = localDate(new Date().toISOString()).split("-").map(Number);
+  return Array.from({ length: 12 }, (_, index) => new Date(Date.UTC(year, month - 1 + index, 1)).toISOString().slice(0, 7));
+}
+
+export function ParcelClimate({ point }: { point: Coordinates }) {
+  const params = new URLSearchParams({ lat: String(point.latitude), lon: String(point.longitude) }).toString();
+  return <ClimatePanel key={params} params={params} />;
+}
+
+function ClimatePanel({ params }: { params: string }) {
+  const [months] = useState(monthOptions);
+  const [month, setMonth] = useState(months[0]);
+  const [use, setUse] = useState<CropUse | "">("");
+  const [phText, setPhText] = useState("");
+  const [attempt, setAttempt] = useState(0);
+  const [state, setState] = useState<{ profile: ClimateProfile | null; cached: boolean }>();
+  const season = useEnso();
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const debounce = window.setTimeout(() => {
+      fetch(`/api/climate?${params}`, { signal: controller.signal }).then(async (response) => {
+        if (!response.ok) throw new Error("NASA POWER");
+        const profile = await response.json() as ClimateProfile;
+        if (controller.signal.aborted) return;
+        try { localStorage.setItem(climateKey, JSON.stringify({ params, profile })); } catch {}
+        setState({ profile, cached: false });
+      }).catch(() => {
+        if (controller.signal.aborted) return;
+        let profile: ClimateProfile | null = null;
+        try {
+          const stored = JSON.parse(localStorage.getItem(climateKey) ?? "null");
+          if (stored?.params === params) profile = stored.profile;
+        } catch {}
+        setState({ profile, cached: Boolean(profile) });
+      });
+    }, 400);
+    return () => {
+      window.clearTimeout(debounce);
+      controller.abort();
+    };
+  }, [params, attempt]);
+
+  const profile = state?.profile;
+  const index = Number(month.slice(5)) - 1;
+  const metrics = profile?.months[index];
+  const ph = decimal(phText);
+  const phValid = Number.isFinite(ph) && ph >= 0 && ph <= 14;
+  const crops = profile ? rankCrops(profile.crops[index], use, phValid ? ph : null) : null;
+  return (
+    <section id="clima-parcela" aria-labelledby="climate-title" className="panel scroll-mt-5">
+      <h2 id="climate-title" className="flex items-center gap-2 text-xl font-bold"><Sprout size={22} aria-hidden="true" /> Clima y cultivos para este punto</h2>
+      {!state && <p role="status" className="mt-2 text-sm text-muted">Consultando el historial de NASA POWER…</p>}
+      {state && !profile && (
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <p role="status" className="text-sm text-muted">Historial no disponible para este punto. Puedes reintentar con conexión.</p>
+          <Button type="button" variant="secondary" onClick={() => { setState(undefined); setAttempt(attempt + 1); }}>Reintentar historial</Button>
+        </div>
+      )}
+      {profile && metrics && crops && <>
+        <p className="mt-1 text-sm text-muted">
+          NASA POWER · {profile.from.slice(0, 4)}–{profile.to.slice(0, 4)} · tiempo solar local.
+          {state?.cached && <> Copia guardada el {profile.queriedAt.slice(0, 10)}.</>}
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div>
+            <label htmlFor="planting-month" className="mb-1 block text-sm font-semibold">Mes previsto de siembra</label>
+            <NativeSelect id="planting-month" value={month} onChange={(event) => setMonth(event.target.value)}>
+              {months.map((option) => <option key={option} value={option}>{labelMonth(option)}</option>)}
+            </NativeSelect>
+          </div>
+          <div>
+            <label htmlFor="climate-use" className="mb-1 block text-sm font-semibold">Destino de la cosecha</label>
+            <NativeSelect id="climate-use" value={use} onChange={(event) => setUse(event.target.value as CropUse | "")}>
+              <option value="">Cualquier destino</option>
+              <option value="forraje">Forraje</option>
+              <option value="consumo">Consumo</option>
+            </NativeSelect>
+          </div>
+          <div>
+            <label htmlFor="climate-ph" className="mb-1 block text-sm font-semibold">pH medido (opcional)</label>
+            <Input id="climate-ph" inputMode="decimal" value={phText} aria-invalid={Boolean(phText) && !phValid} aria-describedby={phText && !phValid ? "climate-ph-error" : undefined} onChange={(event) => setPhText(event.target.value)} />
+            {phText && !phValid && <p id="climate-ph-error" className="mt-1 text-xs text-red-800">Ingresa un pH entre 0 y 14.</p>}
+          </div>
+        </div>
+        <div aria-live="polite">
+          <dl className="my-4 grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-3 rounded-xl bg-canvas p-3 text-sm">
+            <div><dt className="text-muted">Temperatura media</dt><dd className="font-bold">{metric(metrics.temperature, "°C")}</dd></div>
+            <div><dt className="text-muted">Mín. / máx. medias</dt><dd className="font-bold">{metric(metrics.minimum, "°C")} / {metric(metrics.maximum, "°C")}</dd></div>
+            <div><dt className="text-muted">Humedad relativa</dt><dd className="font-bold">{metric(metrics.humidity, "%")}</dd></div>
+            <div><dt className="text-muted">Lluvia del mes</dt><dd className="font-bold">{metric(metrics.rain, "mm")}</dd></div>
+            <div><dt className="text-muted">Lluvia anual media</dt><dd className="font-bold">{metric(profile.annualRain, "mm")}</dd></div>
+          </dl>
+          {!season && <p className="mb-3 text-sm text-muted">Consultando el boletín estacional…</p>}
+          {season && !season.outlook && <p className="mb-3 text-sm text-muted">Boletín estacional no disponible. Confirma el panorama con <a href={ensoSource} className="underline">NOAA CPC</a>.</p>}
+          {season?.outlook && <EnsoAttribution outlook={season.outlook} cached={season.cached} />}
+          {season?.outlook && !hasEnsoCoverage(season.outlook, month, 1) && <p className="mt-1 text-sm text-muted">El boletín aún no cubre el mes de siembra elegido.</p>}
+          <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+            {crops.map((crop) => <CropCard key={crop.species} crop={crop} month={month} outlook={season?.outlook ?? null} />)}
+          </ul>
+        </div>
+        <details className="mt-4 border-t border-line pt-3 text-sm">
+          <summary className="min-h-8 cursor-pointer font-semibold">Cómo se calcula la aptitud</summary>
+          <p className="mt-1 text-muted">El orden usa el destino de la cosecha, las temperaturas diarias del mes de siembra y el pH medido si está disponible. El análisis compara cuatro cultivos de <a href={ecocropSource} className="underline">FAO EcoCrop</a> y requiere al menos tres ocurrencias completas del mes. La lluvia anual orienta la revisión del agua de riego.</p>
+          <p className="mt-2 text-muted">La cuadrícula de <a href={powerSource} className="underline">NASA POWER</a> describe el clima regional. La humedad es informativa. La señal ENSO indica cuándo revisar la campaña con fuentes locales de lluvia y temperatura.</p>
+        </details>
+      </>}
+    </section>
+  );
+}
+
+function CropCard({ crop, month, outlook }: { crop: ReturnType<typeof rankCrops>[number]; month: string; outlook: EnsoOutlook | null }) {
+  const signal = outlook && relevantEnso(outlook, month, crop.days).sort((a, b) => b.probability - a.probability)[0];
+  const labels = { recommended: "Buen ajuste térmico", conditional: "Ajuste térmico condicionado", unsuitable: "Ajuste térmico bajo" };
+  const climateStatus = crop.assessment ? labels[crop.assessment.category] : "Datos insuficientes";
+  return (
+    <li className="rounded-xl border border-line bg-surface p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h3 className="font-bold">{crop.name}</h3>
+          <p className="text-xs text-muted">{crop.use === "forraje" ? "Forraje" : "Consumo"} · {crop.samples} años con el mes completo</p>
+        </div>
+      </div>
+      <p className="mt-2 text-sm font-semibold">{climateStatus}{signal && crop.assessment && " · revisar campaña"}</p>
+      {!crop.eligible && <p className="text-xs font-semibold text-muted">Fuera del destino elegido.</p>}
+      {crop.assessment && <p className="mt-1 flex items-start gap-1 text-xs text-muted"><ThermometerSun size={14} className="shrink-0" aria-hidden="true" />
+        {crop.assessment.optimal} de {crop.assessment.observations} días en el óptimo térmico · {crop.assessment.outside} fuera del límite.
+      </p>}
+      <p className="mt-1 text-xs text-muted">Lluvia anual {crop.optimalRain === null ? "sin dato" : crop.optimalRain ? "en el rango óptimo" : "fuera del rango óptimo"}.</p>
+      {crop.phMatch !== null && <p className="text-xs text-muted">pH medido {crop.phMatch ? "en el rango óptimo" : "fuera del rango óptimo"} ({crop.optimalPh.map((value) => number.format(value)).join("–")}).</p>}
+      {signal && <p className="mt-2 rounded-md bg-[#f4ebd7] p-2 text-xs text-[#624217]">{signal.phase} · {signal.probability}% en {seasonLabel(signal)}. Confirma el panorama local antes de sembrar.</p>}
+    </li>
+  );
+}

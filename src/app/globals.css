@@ -1,0 +1,402 @@
+@import "tailwindcss";
+
+@theme {
+  --color-canvas: #f3f6ef;
+  --color-surface: #fcfdf9;
+  --color-ink: #203020;
+  --color-muted: #51624e;
+  --color-line: #dce6d6;
+  --color-action: #173c30;
+  --color-leaf: #d8ebc9;
+  --font-sans: "DM Sans Variable", system-ui, sans-serif;
+  --font-display: "DM Sans Variable", system-ui, sans-serif;
+}
+
+body {
+  @apply bg-canvas font-sans text-ink antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid #ad551c;
+  outline-offset: 3px;
+}
+
+.skip-link {
+  @apply sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-xl focus:bg-surface focus:p-3;
+}
+
+.site-header {
+  color: #f7ffec;
+  border-bottom: 1px solid #749753;
+  background: linear-gradient(90deg, #192d1b 12%, #263d21ed 54%, #20351bda), url("/images/carla-cultivos.jpg") center 72% / cover;
+  box-shadow: 0 8px 30px #17281938;
+}
+
+.header-inner {
+  @apply mx-auto flex min-h-[4.5rem] max-w-[92rem] items-center justify-between gap-3 px-4 sm:min-h-[5.125rem] sm:px-6;
+}
+
+.brand {
+  @apply inline-flex min-w-0 items-center gap-2.5 leading-tight;
+}
+
+.brand-mark {
+  @apply grid size-10 shrink-0 place-items-center rounded-[13px] bg-[#d8efac] text-[#283f20] shadow-md sm:size-[45px];
+}
+
+.brand strong, .brand small {
+  @apply block;
+}
+
+.brand small {
+  @apply text-xs text-[#c9dcbb];
+}
+
+.project-link {
+  @apply inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl bg-[#f4f9e9] px-2.5 text-center text-sm font-bold text-[#253b1f] hover:bg-[#dff0bd] motion-safe:transition-colors sm:px-4;
+}
+
+.app-frame {
+  @apply mx-auto max-w-[1490px];
+}
+
+.app-frame main {
+  min-width: 0;
+  padding: 1rem clamp(0.75rem, 2.5vw, 2rem) calc(5.5rem + env(safe-area-inset-bottom));
+}
+
+.app-navigation {
+  @apply fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 gap-1 border-t border-line bg-surface/95 px-2 pt-1.5 backdrop-blur-md;
+  padding-bottom: max(0.375rem, env(safe-area-inset-bottom));
+  box-shadow: 0 -8px 25px #26362112;
+}
+
+.app-navigation a {
+  @apply flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-center text-xs font-semibold leading-none text-muted hover:bg-leaf/50 motion-safe:transition-colors;
+}
+
+.nav-icon {
+  @apply grid h-[30px] w-[34px] shrink-0 place-items-center rounded-[10px];
+}
+
+.app-navigation a[aria-current="page"] {
+  @apply bg-[#eaf3df] text-[#263821];
+}
+
+.app-navigation a[aria-current="page"] .nav-icon {
+  @apply bg-[#cce994];
+}
+
+@media (min-width: 55rem) {
+  body {
+    background: linear-gradient(180deg, #21351f1f, #21351f70 44%, #233722ba), url("/images/carla-valle.webp") center top / cover fixed;
+  }
+
+  .app-frame {
+    display: grid;
+    grid-template-columns: 210px minmax(0, 1fr);
+    align-items: start;
+    gap: 24px;
+    padding: 24px 28px 70px;
+  }
+
+  .app-navigation {
+    @apply sticky top-4 flex flex-col gap-[7px] rounded-[23px] border border-[#38502d] p-[13px] backdrop-blur-none;
+    background: linear-gradient(155deg, #304b27, #22351e);
+    box-shadow: 0 12px 27px #22351e25;
+  }
+
+  .app-navigation a {
+    @apply min-h-12 flex-row justify-start gap-2.5 p-2 text-left text-sm text-[#e9f2df] hover:bg-white/10;
+  }
+
+  .app-navigation a[aria-current="page"] {
+    @apply bg-[#ddf1b8] text-[#23381b];
+  }
+
+  .app-navigation .nav-icon {
+    @apply size-[34px] bg-white/10 text-[#d7ecc7];
+  }
+
+  .app-navigation a[aria-current="page"] .nav-icon {
+    @apply bg-[#354e28] text-[#e3f2c8];
+  }
+
+  .app-navigation a:last-child {
+    @apply mt-1 border-t border-white/15;
+  }
+
+  .app-frame main {
+    padding: 22px;
+    background: #f0f4e9;
+    border: 1px solid #ffffff8c;
+    border-radius: 32px;
+    box-shadow: 0 20px 54px #16271952;
+  }
+}
+
+h1 {
+  @apply font-bold;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+}
+
+h2 {
+  letter-spacing: -0.025em;
+}
+
+.intro {
+  @apply mt-2 max-w-2xl leading-relaxed text-muted;
+}
+
+.location {
+  @apply mb-2 text-sm font-semibold text-muted;
+}
+
+.panel {
+  @apply min-w-0 rounded-2xl border border-line bg-surface p-4 sm:p-5;
+}
+
+.rotation-option[data-preferred="true"] {
+  @apply border-[#829e76] bg-[#edf5e5];
+}
+
+.pilot-card {
+  @apply rounded-2xl px-5 pt-9 pb-5 text-white sm:px-8;
+  background: linear-gradient(90deg, #132b20 0%, #132b20ed 38%, #1a372d66 100%), url("/images/valle-cochabamba.jpg") center 59% / cover;
+}
+
+@media (max-width: 35rem) {
+  .pilot-card {
+    background-image: linear-gradient(90deg, #132b20f7 5%, #132b20ba 100%), url("/images/valle-cochabamba.jpg");
+  }
+}
+
+.pilot {
+  @apply py-6 sm:py-9;
+}
+
+.pilot-overview {
+  @apply grid items-end gap-5 pt-6 pb-3 md:grid-cols-[1.7fr_1fr];
+}
+
+.rotations {
+  @apply mt-7;
+}
+
+.rotations h2 {
+  @apply text-2xl font-bold;
+}
+
+.rotations > p {
+  @apply mt-1 text-sm leading-relaxed text-muted;
+}
+
+.rotations ul {
+  @apply mt-4 divide-y divide-line border-y border-line;
+}
+
+.rotations li {
+  @apply flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-4;
+}
+
+.rotations li span {
+  @apply text-sm text-muted;
+}
+
+.parcel-viewport {
+  @apply h-[22rem] w-full bg-[#e2ebd8] sm:h-[28rem];
+}
+
+.parcel-viewport[data-overview="true"] {
+  height: clamp(335px, 58dvh, 650px);
+}
+
+.parcel-viewport .leaflet-control-attribution {
+  max-width: min(24rem, 68vw);
+  text-align: right;
+}
+
+.parcel-viewport .leaflet-control-zoom a {
+  width: 39px;
+  height: 39px;
+  line-height: 39px;
+}
+
+.district-label.leaflet-tooltip {
+  @apply border-0 bg-action text-white shadow-none;
+}
+
+.district-label.priority-district.leaflet-tooltip {
+  @apply bg-leaf font-bold text-action;
+}
+
+.parcel-viewport.hide-district-labels .district-label {
+  display: none;
+}
+
+.field-hero {
+  @apply grid overflow-hidden rounded-[30px] text-[#f8fced];
+  grid-template-columns: 1.06fr 1fr;
+  background: radial-gradient(ellipse at 25% 100%, #486132, #213720 75%);
+  box-shadow: 0 18px 40px #263b2024;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .field-hero { animation: field-hero-arrive 400ms ease-out both; }
+}
+
+@keyframes field-hero-arrive {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.field-hero-copy {
+  align-self: center;
+  padding: clamp(25px, 4vw, 54px);
+}
+
+.field-hero-place {
+  @apply mb-4 flex items-center gap-2 text-sm font-bold text-[#cfebae];
+}
+
+.field-hero h1 {
+  font-size: clamp(2.6rem, 5.8vw, 5.4rem);
+  line-height: 0.98;
+  letter-spacing: -0.063em;
+}
+
+.field-hero-copy > p:last-child {
+  @apply mt-4 max-w-[32ch] text-[#e4edd9];
+}
+
+.field-hero-photos {
+  @apply grid min-w-0 gap-[9px] py-[14px] pr-[14px];
+  grid-template-columns: 1fr 0.52fr;
+}
+
+.field-hero-photos > div {
+  border-radius: 19px;
+  background: url("/images/carla-valle.webp") 48% center / cover;
+}
+
+.field-hero-photos > div + div {
+  background-image: url("/images/carla-cultivos.jpg");
+  background-position: 72% center;
+}
+
+.section-cover {
+  @apply mb-6 grid min-h-[166px] content-end rounded-[19px] p-5 text-white sm:min-h-[210px] sm:rounded-3xl sm:p-8;
+  background: linear-gradient(90deg, #203215ed, #20321560), url("/images/carla-valle.webp") center 46% / cover;
+}
+
+.section-cover[data-cover="crops"] { background-position: center 68%; }
+.section-cover .intro { color: #f2f7e8; }
+
+.map-section {
+  @apply mt-7 min-w-0 scroll-mt-5 rounded-3xl border border-line bg-[#fcfdf8] p-3.5 sm:p-5 lg:p-6;
+}
+
+.map-section-heading {
+  @apply mb-4 flex items-center gap-3 rounded-2xl p-4;
+  background: linear-gradient(90deg, #f1f6eb 45%, #e7f2ddda), url("/images/carla-cultivos.jpg") right 62% / cover;
+}
+
+.map-section-heading h2 {
+  @apply text-[clamp(1.45rem,3vw,2rem)] leading-tight font-bold;
+}
+
+.map-section-heading p {
+  @apply mt-1 text-sm text-muted;
+}
+
+.map-emblem {
+  @apply grid size-10 shrink-0 place-items-center rounded-xl bg-[#d8ebc9] text-[#283f20];
+}
+
+.map-distribution {
+  @apply grid min-w-0 items-center gap-4;
+}
+
+@media (min-width: 701px) {
+  .map-distribution { grid-template-columns: minmax(200px, 0.4fr) minmax(0, 1fr); }
+}
+
+.map-controls {
+  @apply grid min-w-0 gap-4 rounded-[19px] border border-[#e0e8d8] bg-[#f1f5e9] p-4;
+}
+
+.map-control-label {
+  @apply flex min-h-9 items-center gap-2 text-sm font-bold;
+}
+
+.map-control-label svg {
+  @apply box-content shrink-0 rounded-[9px] bg-[#deedce] p-2 text-[#2e5226];
+}
+
+.map-controls select {
+  @apply min-h-12 border-[#d1ddc8] bg-white;
+}
+
+.map-separator {
+  @apply flex items-center gap-2 text-sm text-[#566d4c];
+}
+
+.map-separator::before, .map-separator::after {
+  content: "";
+  @apply h-px flex-1 bg-[#c7d6be];
+}
+
+.map-location {
+  @apply border-[#315a25] bg-[#315a25] hover:bg-[#3d6b30];
+}
+
+.map-selected {
+  @apply mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-[#d2e0c8] bg-[#eff5e9] p-3.5 font-bold tabular-nums;
+}
+
+.place-search {
+  @apply relative z-10 min-w-0;
+}
+
+.place-search-input {
+  @apply mt-1.5 flex min-h-12 items-center gap-2 rounded-xl border border-[#d1ddc8] bg-white pl-3 text-[#455b38] focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-[#779554];
+}
+
+.place-search-input > svg {
+  @apply shrink-0;
+}
+
+.place-search-input input {
+  @apply border-0 bg-transparent px-0 outline-none;
+}
+
+.place-search-input input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.place-search-input button {
+  @apply grid min-h-11 min-w-11 cursor-pointer place-items-center;
+}
+
+.place-search-popup {
+  @apply absolute inset-x-0 top-full z-10 mt-1 max-h-[245px] overflow-auto rounded-[14px] border border-line bg-surface shadow-xl;
+}
+
+.place-search-popup li {
+  @apply grid min-h-[52px] cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 px-3 py-2 text-sm text-[#253a22] hover:bg-[#e7f0dc];
+}
+
+.place-search-popup li[aria-selected="true"] {
+  @apply bg-[#e7f0dc];
+}
+
+@media (max-width: 650px) {
+  .field-hero { @apply flex flex-col-reverse rounded-[22px]; }
+  .field-hero-copy { @apply self-stretch px-5 pt-[19px] pb-[22px]; }
+  .field-hero-photos { @apply h-[124px] gap-1.5 p-[9px] pb-0; }
+  .field-hero-photos > div { border-radius: 14px; }
+  .field-hero h1 { font-size: clamp(2.25rem, 10vw, 3rem); }
+  .field-hero h1 br { display: none; }
+}
