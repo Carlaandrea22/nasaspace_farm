@@ -19,7 +19,7 @@ export async function readWeather(point: Point) {
   url.search = new URLSearchParams({
     latitude: String(point.latitude),
     longitude: String(point.longitude),
-    daily: "precipitation_sum,et0_fao_evapotranspiration,temperature_2m_min",
+    daily: "precipitation_sum,et0_fao_evapotranspiration,temperature_2m_min,temperature_2m_max,relative_humidity_2m_mean",
     timezone: timeZone,
     past_days: "3",
     forecast_days: "14",

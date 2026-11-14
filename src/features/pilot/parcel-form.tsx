@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useRef, useState, type SubmitEvent } from "react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
+import { ParcelClimate } from "../climate/parcel-climate";
 import { getReferenceCase, referenceCases } from "../territory/reference";
 import { TerritorySummary } from "../territory/summary";
 import type { Territory } from "../territory/types";
@@ -117,6 +118,7 @@ function ParcelFields({ parcel, explore, save, status, markEdited }: { parcel?: 
             {Object.entries(referenceCases).map(([key, option]) => (
               <Button key={key} type="button" variant="secondary" aria-pressed={reference === key} className="aria-pressed:border-action aria-pressed:bg-leaf" onClick={() => selectPoint(option)}>{option.label}</Button>
             ))}
+            {selected && <Button asChild variant="secondary"><a href="#clima-parcela">Ver clima y cultivos</a></Button>}
           </div>
         </section>
         <section aria-labelledby="parcel-fields" className="panel">
@@ -136,6 +138,7 @@ function ParcelFields({ parcel, explore, save, status, markEdited }: { parcel?: 
           </form>
         </section>
       </div>
+      {selected && <ParcelClimate point={selected} />}
       <TerritorySummary reference={reference} result={currentResult} />
       <div className="grid justify-items-start gap-2">
         <Button type="button" variant="secondary" disabled={!selected || consulting || status === "saving"} onClick={() => void consult()}>{consulting ? "Consultando…" : "Consultar GAMC"}</Button>

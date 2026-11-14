@@ -6,7 +6,7 @@ export const gamcSource = "https://recursosgamc.cochabamba.bo/api-doc";
 export const inspectionThreshold = 30;
 export const timeZone = "America/La_Paz";
 
-export type WeatherDay = { date: string; rain: number | null; et0: number | null; minimum: number | null };
+export type WeatherDay = { date: string; rain: number | null; et0: number | null; minimum: number | null; maximum?: number | null; humidity?: number | null };
 export type RecentRain = { date: string; rain: number | null; source: "imerg-early" | "modeled" | "missing" };
 export type Forecast = { today: string; queriedAt: string; days: WeatherDay[]; recent: RecentRain[] };
 export type TerritoryExposure = Pick<Territory, "source" | "queriedAt" | "district" | "drainage">;
@@ -59,6 +59,8 @@ export function toForecast(input: unknown, queriedAt: string, early: Record<stri
       rain: metric(daily.precipitation_sum?.[index]),
       et0: metric(daily.et0_fao_evapotranspiration?.[index]),
       minimum: metric(daily.temperature_2m_min?.[index], -100),
+      maximum: units.temperature_2m_max === "°C" ? metric(daily.temperature_2m_max?.[index], -100) : null,
+      humidity: units.relative_humidity_2m_mean === "%" ? metric(daily.relative_humidity_2m_mean?.[index]) : null,
     });
   }
 
@@ -74,6 +76,13 @@ export function toForecast(input: unknown, queriedAt: string, early: Record<stri
   });
 
   return { today, queriedAt, days, recent };
+}
+
+export const heatThreshold = 32;
+
+export function heatSignals(forecast: Forecast) {
+  return horizon(forecast.days, forecast.today, 3).flatMap((day) =>
+    day.maximum != null && day.maximum >= heatThreshold ? [{ ...day, maximum: day.maximum }] : []);
 }
 
 export function summarizeWeather(days: WeatherDay[]) {

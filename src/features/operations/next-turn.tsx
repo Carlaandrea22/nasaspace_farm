@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CalendarDays, CloudRain } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import { Button } from "../../components/ui/button";
+import { ClimateNotices } from "../climate/climate-notices";
 import { DraftForm, DraftHeader } from "../pilot/draft-form";
 import { cropForParcel, locationKey, pilotCoordinates, type Coordinates, type CropWater, type Parcel } from "../pilot/draft";
 import {
@@ -70,6 +71,20 @@ function useWeather({ latitude, longitude }: Coordinates) {
     setTerritory(null);
     setRefresh((previous) => previous + 1);
   }
+
+  useEffect(() => {
+    const refreshOnReturn = () => {
+      if (document.visibilityState === "visible") setRefresh((previous) => previous + 1);
+    };
+    const timer = window.setInterval(refreshOnReturn, 60 * 60 * 1000);
+    window.addEventListener("online", refreshOnReturn);
+    document.addEventListener("visibilitychange", refreshOnReturn);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("online", refreshOnReturn);
+      document.removeEventListener("visibilitychange", refreshOnReturn);
+    };
+  }, []);
 
   return { weather, territory, update };
 }
@@ -235,6 +250,7 @@ function ForecastPanel({ parcel, cropWater }: { parcel?: Parcel; cropWater?: Cro
       </div>
       {done && !forecast && <Alert role="note" className="mb-7"><AlertTitle>Pronóstico no disponible</AlertTitle><AlertDescription>No hay datos guardados para este punto. Vuelve a consultar con conexión.</AlertDescription></Alert>}
       {cached && <Alert role="note" className="mb-7"><AlertTitle>Pronóstico de una consulta anterior</AlertTitle><AlertDescription>Consulta la fecha indicada y actualiza antes de ajustar el turno.</AlertDescription></Alert>}
+      <ClimateNotices forecast={forecast} cached={cached} parcelKey={parcelKey} />
       {sheet && <Inspection sheet={sheet} />}
       {heavy && !sheet && <Alert role="note" className="mb-7"><AlertTitle>Señal de lluvia intensa</AlertTitle><AlertDescription>
         {amount(heavy.rain)} el {formatDate(heavy.date)}. {territory?.drainage.status === "no-match"
