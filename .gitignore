@@ -1,0 +1,12 @@
+/node_modules/
+/.next/
+/next-env.d.ts
+/public/sw.js
+/*.tsbuildinfo
+/.playwright-mcp/
+.DS_Store
+.env*
+!.env.example
+/.secrets/
+/AGENTS.md
+__pycache__/

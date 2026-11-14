@@ -1,0 +1,10 @@
+{
+  "location": {
+    "latitude": -17.42442,
+    "longitude": -66.18272,
+    "radiusKm": 4
+  },
+  "days": {},
+  "source": "https://gpm.nasa.gov/data/directory",
+  "timeStandard": "America/La_Paz"
+}
