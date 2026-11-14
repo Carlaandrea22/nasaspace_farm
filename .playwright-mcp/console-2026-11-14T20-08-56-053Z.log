@@ -1,1 +1,4 @@
 [    1162ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://127.0.0.1:8765/favicon.ico:1
+[  416869ms] [ERROR] Failed to load resource: the server responded with a status of 400 (Bad Request) @ http://127.0.0.1:8765/api/analisis?lat=-17.44421&lon=-66.16169&year=2026&month=11&priority=forraje&ph=:1
+[  419140ms] [ERROR] Failed to load resource: the server responded with a status of 400 (Bad Request) @ http://127.0.0.1:8765/api/analisis?lat=-17.41696&lon=-66.15724&year=2026&month=11&priority=forraje&ph=:1
+[  425066ms] [ERROR] Failed to load resource: the server responded with a status of 400 (Bad Request) @ http://127.0.0.1:8765/api/analisis?lat=-17.43792&lon=-66.19297&year=2026&month=11&priority=forraje&ph=:1

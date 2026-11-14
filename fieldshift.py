@@ -20,6 +20,8 @@ FORECAST = "https://api.open-meteo.com/v1/forecast"
 IMERG = "https://gis.earthdata.nasa.gov/portal/rest/services/GESDISC/GPM_3IMERGHHE/ImageServer"
 VARIABLES = ("T2M", "T2M_MIN", "T2M_MAX", "RH2M", "PRECTOTCORR", "GWETROOT",
              "WS2M", "ALLSKY_SFC_SW_DWN")
+HISTORY_YEARS = 10
+BOLIVIA_TIME = timezone(timedelta(hours=-4))
 # FAO-56 table 12. Use the maize grain profile as a provisional approximation
 # for forage maize. Stop the schedule when the producer plans to cut.
 PROFILES = {
@@ -49,24 +51,46 @@ def load_crops():
 
 
 def crop_order(crop):
-    return (not crop["eligible"], crop["temperature"]["outside_days"],
-            -crop["temperature"]["optimal_days"], crop["ph_match"] is False)
+    temperature = crop["temperature"]
+    categories = ("recommended", "conditional", "unsuitable")
+    return (not crop["eligible"], categories.index(temperature["category"]),
+            temperature["outside_days"], -temperature["optimal_days"],
+            crop["ph_match"] is False)
+
+
+def assess_temperature(temperatures, optimum, limits):
+    low, high = optimum
+    minimum, maximum = limits
+    total = len(temperatures)
+    cold = sum(temp < minimum for temp in temperatures)
+    hot = sum(temp > maximum for temp in temperatures)
+    outside = cold + hot
+    optimal = sum(low <= temp <= high for temp in temperatures)
+    average_gap = mean(max(low - temp, temp - high, 0) for temp in temperatures)
+    largest_excess = max(max(minimum - temp, temp - maximum, 0) for temp in temperatures)
+    # Screening rules for the demo. The reference ranges come from EcoCrop.
+    if outside == 0 and optimal > total / 2:
+        category = "recommended"
+    elif outside <= total * 0.10 and largest_excess <= 2 and average_gap <= 2:
+        category = "conditional"
+    else:
+        category = "unsuitable"
+    return {"category": category, "optimal_days": optimal, "outside_days": outside,
+            "cold_days": cold, "hot_days": hot, "total_days": total,
+            "below_optimum_days": sum(temp < low for temp in temperatures),
+            "above_optimum_days": sum(temp > high for temp in temperatures),
+            "average_gap": round(average_gap, 2), "largest_excess": round(largest_excess, 2)}
 
 
 def rank_crops(crops, temperatures, annual_rain, ph, priority):
     results = []
     for crop in crops:
-        t_low, t_high = crop["temp_opt"]
-        abs_low, abs_high = crop["temp_limits"]
-        optimal = sum(t_low <= temp <= t_high for temp in temperatures)
-        outside = sum(not abs_low <= temp <= abs_high for temp in temperatures)
         rain_ok = None if annual_rain is None else crop["rain_opt"][0] <= annual_rain <= crop["rain_opt"][1]
         ph_ok = None if ph is None else crop["ph_opt"][0] <= ph <= crop["ph_opt"][1]
         results.append({
             **crop,
             "eligible": priority in ("cualquiera", crop["use"]),
-            "temperature": {"optimal_days": optimal, "outside_days": outside,
-                            "total_days": len(temperatures)},
+            "temperature": assess_temperature(temperatures, crop["temp_opt"], crop["temp_limits"]),
             "rainfall": {"score": rain_ok},
             "ph_match": ph_ok,
         })
@@ -99,34 +123,48 @@ def fetch(url, **params):
         return json.load(response), query
 
 
-def historical(lat, lon, year, month, ph, priority):
+def historical(lat, lon, first_year, last_year, month, ph, priority):
     data, query = fetch(POWER, parameters=",".join(VARIABLES), community="AG",
-                        latitude=lat, longitude=lon, start=f"{year}0101",
-                        end=f"{year}1231", format="JSON", **{"time-standard": "LST"})
+                        latitude=lat, longitude=lon, start=f"{first_year}0101",
+                        end=f"{last_year}1231", format="JSON", **{"time-standard": "LST"})
     series = data["properties"]["parameter"]
     missing = data["header"]["fill_value"]
     days = []
-    for offset in range(365 + calendar.isleap(year)):
-        day = date(year, 1, 1) + timedelta(days=offset)
-        key = day.strftime("%Y%m%d")
-        values = {}
-        for variable in VARIABLES:
-            value = series.get(variable, {}).get(key, missing)
-            values[variable] = value if value != missing else None
-        days.append({"date": day.isoformat(), **values})
+    temperatures = []
+    temperature_years = []
+    annual_totals = []
+    for year in range(first_year, last_year + 1):
+        year_rain = []
+        month_temps = []
+        year_length = 365 + calendar.isleap(year)
+        for offset in range(year_length):
+            day = date(year, 1, 1) + timedelta(days=offset)
+            key = day.strftime("%Y%m%d")
+            rain = series.get("PRECTOTCORR", {}).get(key, missing)
+            if rain is not None and rain != missing:
+                year_rain.append(rain)
+            if day.month != month:
+                continue
+            values = {variable: series.get(variable, {}).get(key, missing) for variable in VARIABLES}
+            values = {variable: None if value == missing else value for variable, value in values.items()}
+            days.append({"date": day.isoformat(), **values})
+            if values["T2M"] is not None:
+                month_temps.append(values["T2M"])
+        if len(month_temps) == calendar.monthrange(year, month)[1]:
+            temperature_years.append(year)
+            temperatures.extend(month_temps)
+        if len(year_rain) == year_length:
+            annual_totals.append(sum(year_rain))
 
-    temperatures = [day["T2M"] for day in days
-                    if day["date"][5:7] == f"{month:02}" and day["T2M"] is not None]
-    rain = [day["PRECTOTCORR"] for day in days if day["PRECTOTCORR"] is not None]
-    complete_month = len(temperatures) == calendar.monthrange(year, month)[1]
-    annual_rain = round(sum(rain), 2) if len(rain) == len(days) else None
-    crops = rank_crops(load_crops(), temperatures, annual_rain, ph, priority) if complete_month else []
+    annual_rain = round(mean(annual_totals), 2) if annual_totals else None
+    crops = rank_crops(load_crops(), temperatures, annual_rain, ph, priority) if temperatures else []
     preferred = []
-    if crops and crops[0]["eligible"] and crops[0]["temperature"]["optimal_days"]:
+    if crops and crops[0]["eligible"] and crops[0]["temperature"]["category"] == "recommended":
         preferred = [crop["id"] for crop in crops if crop_order(crop) == crop_order(crops[0])]
     return {"days": days, "url": query, "annual_rain": annual_rain,
             "month_average": round(mean(temperatures), 2) if temperatures else None,
-            "temperature_days": len(temperatures), "rain_days": len(rain),
+            "temperature_days": len(temperatures), "temperature_years": temperature_years,
+            "rain_years": len(annual_totals), "first_year": first_year, "last_year": last_year,
             "crops": crops, "preferred": preferred}
 
 
@@ -190,16 +228,19 @@ def number(params, name, low, high, default=None):
 def analyze(params):
     lat = number(params, "lat", -60, 60)
     lon = number(params, "lon", -180, 180)
-    year = number(params, "year", 2001, date.today().year - 1)
-    month = number(params, "month", 1, 12)
-    if year % 1 or month % 1:
-        raise ValueError("El año y el mes deben ser enteros.")
+    today = datetime.now(BOLIVIA_TIME).date()
+    try:
+        planting_date = date.fromisoformat(params.get("planting", [today.isoformat()])[0])
+    except ValueError:
+        raise ValueError("Introduce una fecha de siembra válida.") from None
+    last_year = today.year - 1
     ph = number(params, "ph", 0, 14) if params.get("ph", [""])[0] else None
-    priority = params.get("priority", ["forraje"])[0]
+    priority = params.get("priority", ["cualquiera"])[0]
     if priority not in ("forraje", "consumo", "cualquiera"):
         raise ValueError("Prioridad desconocida.")
     with ThreadPoolExecutor(3) as pool:
-        history = pool.submit(available, historical, lat, lon, int(year), int(month), ph, priority)
+        history = pool.submit(available, historical, lat, lon,
+                              last_year - HISTORY_YEARS + 1, last_year, planting_date.month, ph, priority)
         upcoming = pool.submit(available, forecast, lat, lon)
         imerg = pool.submit(available, imerg_sample, lat, lon)
         return {"historical": history.result(), "forecast": upcoming.result(),
