@@ -41,21 +41,23 @@ export default function Inicio() {
     window.scrollTo(0, 0);
   }
 
-  return <>
+  return <div className="sitio">
     <header className="barra cabecera">
-      <div className="identidad"><span className="emblema"><Sprout size={23}/></span><div><span className="marca">Agua y Siembra</span><span className="lugar">Cochabamba</span></div></div>
-      <button className="cuenta" onClick={() => abrirAcceso("cuenta")}><UserRound size={17}/> <span>Iniciar sesión</span></button>
+      <button className="identidad" onClick={() => ir("mapa")} aria-label="Agua y Siembra, inicio"><span className="emblema"><Sprout size={24} aria-hidden="true"/></span><span><span className="marca">Agua y Siembra</span><span className="lugar">Cochabamba</span></span></button>
+      <button className="cuenta acceso-cabecera" onClick={() => abrirAcceso("cuenta")}><UserRound size={17}/> <span>Iniciar sesión</span><ArrowRight size={16} aria-hidden="true"/></button>
     </header>
     <div className="marco">
       <nav className="navegacion" aria-label="Pantallas">
         {pantallas.map(({ id, nombre, icono: Icono }) =>
-          <button key={id} aria-current={pantalla === id ? "page" : undefined} onClick={() => ir(id)}><Icono size={20} aria-hidden="true"/>{nombre}</button>)}
-        <button onClick={() => abrirAcceso("guardar")}><UserRound size={20} aria-hidden="true"/> Mis parcelas</button>
+          <button key={id} aria-current={pantalla === id ? "page" : undefined} onClick={() => ir(id)}>
+            <span className="icono-nav"><Icono size={19} aria-hidden="true"/></span>{nombre}
+          </button>)}
+        <button className="nav-parcelas" onClick={() => abrirAcceso("guardar")}><span className="icono-nav"><UserRound size={19} aria-hidden="true"/></span>Mis parcelas</button>
       </nav>
       <main>
         {pantalla !== "mapa" && <div className="ubicacion"><p className="contexto">EJEMPLO · LA MAICA</p><span className="demo">Datos de demo</span></div>}
         {pantalla === "agua" && <section>
-          <h1>Mi próximo turno</h1>
+          <div className="portada portada-agua"><div><h1>Mi próximo turno</h1><p>Consulta la lluvia esperada antes de regar.</p></div></div>
           <article className="tarjeta"><CalendarDays size={24}/><h2>En 3 días</h2><p>Turno de ejemplo para maíz en desarrollo.</p></article>
           <h2>Lluvia esperada</h2>
           <div className="segmentos" aria-label="Horizonte del pronóstico">
@@ -67,15 +69,14 @@ export default function Inicio() {
           <details><summary>Fuentes previstas</summary><p>SMAP para humedad regional, GPM IMERG para lluvia reciente, NASA POWER para el historial climático y una fuente abierta para el pronóstico.</p></details>
         </section>}
         {pantalla === "rotaciones" && <section>
-          <h1>¿Qué siembro después?</h1>
-          <p className="subtitulo">Tres opciones después del maíz forrajero.</p>
+          <div className="portada portada-cultivos"><div><h1>¿Qué siembro después?</h1><p>Tres opciones después del maíz forrajero.</p></div></div>
           <label className="campo">Mi prioridad
             <select value={forraje ? "forraje" : "diversificar"} onChange={e => setForraje(e.target.value === "forraje")}>
               <option value="forraje">Mantener el forraje</option><option value="diversificar">Considerar venta o consumo</option>
             </select>
           </label>
           <label className="opcion"><input type="checkbox" checked={retraso} onChange={e => setRetraso(e.target.checked)}/> Simular un retraso de cinco días</label>
-          <div aria-live="polite">
+          <div className="lista-rotaciones" aria-live="polite">
             {cultivos.map(c => <article key={c.nombre} className={`tarjeta rotacion ${c.nombre === "Cebada forrajera" ? "destacada" : ""}`}>
               <h2>{c.nombre}</h2><p>{c.uso}</p>
               {c.nombre === "Cebada forrajera" && <p className="contexto">MENOS DÍAS DE ESTRÉS EN ESTA SIMULACIÓN</p>}
@@ -86,14 +87,30 @@ export default function Inicio() {
           </div>
         </section>}
         {pantalla === "mapa" && <section>
-          <h1>Explora Cochabamba</h1>
-          <p className="subtitulo">Toca un distrito para acercarte. Luego toca el terreno para marcar tu parcela.</p>
-          <Mapa punto={punto} seleccionar={setPunto}/>
-          {punto && <article className="tarjeta">
-            <h2>Punto seleccionado</h2>
-            <p>{punto.lat.toFixed(5)}, {punto.lng.toFixed(5)}</p>
-            <button className="guardar" onClick={() => abrirAcceso("guardar")}>Guardar parcela <ArrowRight size={17}/></button>
-          </article>}
+          <div className="portada-campo">
+            <div className="portada-campo-texto">
+              <p className="portada-lugar"><MapPin size={16} aria-hidden="true"/> Cochabamba, Bolivia</p>
+              <h1>Tu parcela,<br/>a la vista.</h1>
+              <p>Ubica tu terreno, revisa el agua y compara qué sembrar en la próxima campaña.</p>
+            </div>
+            <div className="portada-campo-fotos" aria-hidden="true">
+              <div className="foto-valle"/><div className="foto-cultivos"/>
+            </div>
+          </div>
+          <section className="seccion-mapa" id="explorar-mapa" aria-labelledby="titulo-mapa">
+            <div className="seccion-mapa-cabecera">
+              <span className="emblema"><MapPin size={22} aria-hidden="true"/></span>
+              <div>
+            <h2 id="titulo-mapa">Encuentra tu parcela</h2>
+            <p className="subtitulo">Busca una dirección o elige un distrito para acercarte.</p>
+              </div>
+            </div>
+            <Mapa punto={punto} seleccionar={setPunto}/>
+            <div className="punto-mapa" role="status">
+              <span className="emblema"><MapPin size={23} aria-hidden="true"/></span>
+              <span>{punto ? `${punto.lat.toFixed(5)}, ${punto.lng.toFixed(5)}` : "Selecciona un punto del mapa"}</span>
+            </div>
+          </section>
         </section>}
       </main>
     </div>
@@ -109,5 +126,5 @@ export default function Inicio() {
       <p className="subtitulo">Vista de prototipo. El acceso a cuentas estará disponible al conectar el servidor.</p>
       <button className="guardar" onClick={() => acceso.current?.close()}>Volver a la consulta <ArrowRight size={17}/></button>
     </dialog>
-  </>;
+  </div>;
 }

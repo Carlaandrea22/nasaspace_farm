@@ -56,16 +56,9 @@
 .visor-mapa{height:clamp(350px,61dvh,670px);border-radius:18px;background:#344e36}
 .visor-botones{position:absolute;z-index:1000;top:12px;right:12px;display:flex;flex-direction:column;align-items:end;gap:8px}
 .visor-botones button{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#fcfdf9;color:#203020;font-weight:750;box-shadow:0 2px 10px #0003}
-.visor-opciones{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:10px 0}
-.visor-opciones label{display:flex;align-items:center;gap:6px;min-height:44px}
 .nombre-distrito.leaflet-tooltip{background:#203020df;color:#fff;border:none;box-shadow:none}
 
 .nombre-distrito.distrito-prioritario.leaflet-tooltip{background:#d4ff8c;color:#203020;font-weight:800}
-.leyenda-distritos{display:flex;flex-wrap:wrap;gap:6px 16px;margin:8px 0 12px;font-size:.84rem}
-.leyenda-distritos span{display:inline-flex;align-items:center;gap:6px}
-.leyenda-distritos i{width:14px;height:14px;border:1px solid #657662;border-radius:3px}
-.leyenda-distritos .muestra-prioritaria{background:#d4ff8c;border-color:#476731}
-.leyenda-distritos small{flex-basis:100%;color:#51624e}
 
 .selectores-mapa{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,235px),1fr));gap:0 16px}
 .selectores-mapa small{display:block;color:#51624e;font-weight:400;margin-top:4px}
@@ -77,4 +70,144 @@
 .resultados-mapa{list-style:none;padding:0;margin:0 0 12px;display:grid;gap:4px}
 .resultados-mapa button{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:8px 12px;background:#fcfdf9;border:1px solid #dce6d6}
 .resultados-mapa svg{flex:none}
-.visor-opciones{flex-wrap:wrap}
+
+.cabecera{background:#fcfdf9}
+.marco{max-width:1320px}
+.marco main{min-width:0;width:100%;max-width:1100px}
+.portada{display:flex;align-items:flex-end;min-height:210px;padding:clamp(20px,4vw,38px);border-radius:24px;margin-bottom:8px;color:white;background:linear-gradient(90deg,#203215ed,#20321579 65%,#20321527),url("/cultivos.jpg") center 46%/cover}
+.portada h1{font-size:clamp(2rem,5vw,3.65rem);margin-bottom:9px}
+.portada p{margin:0;color:#f2f7e8}
+.portada-agua,.portada-cultivos{background-image:linear-gradient(90deg,#203215ed,#20321560),url("/valle.webp")}
+.portada-cultivos{background-position:center 68%}
+.buscador{position:relative;z-index:3;min-width:0}
+.buscador-mapa{align-items:center;background:#fff;border:1px solid #a8b69d;border-radius:12px;padding-left:12px;color:#455b38}
+.buscador-mapa:focus-within{outline:2px solid #779554;outline-offset:1px}
+.buscador-mapa svg{flex:none}
+.buscador-mapa input{border:0;background:transparent;padding-left:0;outline:none;cursor:text}
+.buscador-mapa input::-webkit-search-cancel-button{display:none}
+.buscador-mapa button{display:grid;place-items:center;min-width:44px;background:transparent}
+.resultados-mapa,.estado-busqueda{position:absolute;top:100%;left:0;right:0;z-index:5;background:#fcfdf9;border:1px solid #dce6d6;border-radius:14px;box-shadow:0 12px 28px #27391428;overflow:auto;max-height:245px}
+.estado-busqueda{padding:10px 12px;font-size:.85rem}
+.resultados-mapa li{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;padding:9px 12px;min-height:52px;cursor:pointer;color:#253a22}
+.resultados-mapa li:hover,.resultados-mapa li[aria-selected=true]{background:#e7f0dc}
+.resultados-mapa li span{min-width:0}
+.resultados-mapa li small{margin:0}
+.visor-mapa{height:clamp(335px,58dvh,650px);border-radius:22px}
+.lista-rotaciones{display:grid;gap:12px}
+.lista-rotaciones .tarjeta{margin:4px 0}
+@media(min-width:880px){.marco{grid-template-columns:205px minmax(0,1fr)}.lista-rotaciones{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:600px){.portada{min-height:166px;border-radius:19px}.selectores-mapa{grid-template-columns:1fr}.selectores-mapa .campo{margin:8px 0}.visor{margin-top:8px}}
+
+/* Navigation and map controls share the same olive and lime accents. */
+.cabecera{padding-inline:max(18px,calc((100vw - 1260px)/2));box-shadow:0 2px 12px #29372209}
+.identidad .emblema{background:#263b20;color:#d9f49e}
+.acceso-cabecera,.guardar,.visor-botones button:first-child{background:#314926;color:#f8ffeb;border:1px solid #314926}
+.acceso-cabecera{padding-inline:15px;white-space:nowrap}
+.cuenta,.guardar,.accesos button,.visor-botones button,.navegacion button{transition:background-color .16s,box-shadow .16s}
+.acceso-cabecera:hover,.guardar:hover,.visor-botones button:first-child:hover{background:#476237}
+.visor-botones button{border-radius:100px;padding-inline:16px}
+.visor-botones button:first-child svg{color:#d6ef9d}
+.visor-botones button:last-child{background:#fbfdf6ed;border:1px solid #fff;color:#304526}
+.selectores-mapa{background:#fcfdf9;border:1px solid #e0e8d8;border-radius:19px;padding:5px 16px;gap:0 15px;box-shadow:0 4px 14px #33482a08}
+.selectores-mapa select,.buscador-mapa{background-color:#f4f7ee;border-color:#d1ddc8}
+.selectores-mapa select:hover,.buscador-mapa:hover{border-color:#889e78}
+.accesos button:hover{background:#edf5e4;box-shadow:0 4px 12px #34493113}
+.navegacion .icono-nav{display:grid;place-items:center;width:34px;height:30px;border-radius:10px}
+.navegacion [aria-current] .icono-nav{background:#cce994;color:#263821}
+@media(min-width:880px){
+  .marco{padding-inline:16px;grid-template-columns:210px minmax(0,1fr)}
+  .navegacion{margin-top:40px;gap:7px;padding:13px;border:1px solid #38502d;border-radius:23px;background:linear-gradient(155deg,#304b27,#22351e);color:#e9f2df;box-shadow:0 12px 27px #22351e25}
+  .navegacion button{justify-content:flex-start;gap:10px;padding:8px;text-align:left}
+  .navegacion .icono-nav{background:#ffffff14;color:#d7ecc7;width:34px;height:34px}
+  .navegacion button:hover{background:#ffffff17}
+  .navegacion button[aria-current]{background:#ddf1b8;color:#23381b}
+  .navegacion button[aria-current] .icono-nav{background:#354e28;color:#e3f2c8}
+  .navegacion .nav-parcelas{margin-top:5px;border-top:1px solid #ffffff29}
+}
+@media(max-width:879px){
+  .navegacion{background:#fcfdf9f5;backdrop-filter:blur(12px);box-shadow:0 -8px 25px #26362112;gap:4px}
+  .navegacion button{min-height:58px}
+  .navegacion [aria-current]{background:#eaf3df}
+}
+
+.portada-campo{display:grid;grid-template-columns:1.06fr 1fr;isolation:isolate;overflow:hidden;border-radius:30px;background:radial-gradient(ellipse at 25% 100%,#486132,#213720 75%);color:#f8fced;box-shadow:0 18px 40px #263b2024;animation:entrada-campo .4s ease-out both}
+.portada-campo-texto{padding:clamp(25px,4vw,54px);align-self:center}
+.portada-lugar{display:flex;align-items:center;gap:7px;color:#cfebae;font-weight:700;font-size:.85rem;margin:0 0 15px}
+.portada-campo h1{font-size:clamp(2.6rem,5.8vw,5.4rem);letter-spacing:-.063em;line-height:.98;margin-bottom:16px}
+.portada-campo-texto>p:not(.portada-lugar){max-width:32ch;color:#e4edd9;margin-bottom:21px}
+.portada-campo-fotos{display:grid;grid-template-columns:1fr .52fr;gap:9px;padding:14px 14px 14px 0;min-width:0}
+.foto-valle,.foto-cultivos{border-radius:19px;background-position:center;background-size:cover}
+.foto-valle{background-image:url("/valle.webp");background-position:48% center}
+.foto-cultivos{background-image:url("/cultivos.jpg");background-position:72% center}
+.seccion-mapa{scroll-margin-top:20px}
+.seccion-mapa h2{font-size:clamp(1.45rem,3vw,2rem);letter-spacing:-.035em;margin-bottom:4px}
+@keyframes entrada-campo{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+@media(prefers-reduced-motion:reduce){.portada-campo{animation:none}}
+@media(max-width:650px){
+  .portada-campo{display:flex;flex-direction:column-reverse;border-radius:22px}
+  .portada-campo-fotos{height:124px;padding:9px 9px 0;gap:6px}
+  .foto-valle,.foto-cultivos{border-radius:14px}
+  .portada-campo-texto{align-self:stretch;padding:19px 20px 22px}
+  .portada-campo h1{font-size:clamp(2.25rem,10vw,3rem)}
+  .portada-campo h1 br{display:none}
+}
+
+.sitio{min-height:100dvh;background:#eef2e8}
+.sitio .cabecera{
+  min-height:82px;padding-inline:max(22px,calc((100vw - 1450px)/2));
+  background:linear-gradient(90deg,#192d1b 12%,#263d21ed 54%,#20351bda),url("/cultivos.jpg") center 72%/cover;
+  color:#f7ffec;border-bottom:1px solid #749753;box-shadow:0 8px 30px #17281938
+}
+.cabecera .identidad{background:transparent;border-radius:12px;text-align:left;padding:0;gap:12px}
+.cabecera .marca{font-size:1.13rem}
+.cabecera .lugar{color:#c9dcbb}
+.cabecera .emblema{background:#d8efac;color:#283f20;width:45px;height:45px;box-shadow:0 4px 14px #101d1a40}
+.cabecera .acceso-cabecera{background:#f4f9e9;color:#253b1f;border-color:#f4f9e9}
+.cabecera .acceso-cabecera:hover{background:#dff0bd}
+@media(min-width:880px){
+  .sitio{background:
+    linear-gradient(180deg,#21351f1f,#21351f70 44%,#233722ba 100%),
+    url("/valle.webp") center top/cover fixed}
+  .sitio .marco{max-width:1490px;padding:0 28px 70px;gap:24px}
+  .sitio .marco main{
+    max-width:none;margin:24px 0 0;padding:22px;
+    background:#f0f4e9;border:1px solid #ffffff8c;border-radius:32px;
+    box-shadow:0 20px 54px #16271952
+  }
+  .sitio .navegacion{margin-top:24px}
+}
+@media(max-width:879px){
+  .sitio{background:linear-gradient(155deg,#e4ecd8 0,#f3f5ed 380px)}
+  .sitio .cabecera{min-height:72px;padding:10px 16px}
+  .cabecera .identidad{gap:8px;min-width:0}
+  .cabecera .emblema{width:38px;height:38px}
+  .cabecera .marca{font-size:1rem}
+  .cabecera .acceso-cabecera{gap:6px;padding:8px 10px}
+  .cabecera .acceso-cabecera svg:last-child{display:none}
+  .sitio .marco main{padding-top:16px}
+}
+
+.seccion-mapa{margin-top:28px}
+.distribucion-mapa{display:grid;grid-template-columns:minmax(200px,0.4fr) minmax(0,1fr);gap:16px;align-items:start}
+.distribucion-mapa .selectores-mapa{grid-template-columns:minmax(0,1fr);padding:12px;overflow-wrap:anywhere}
+.distribucion-mapa .visor{margin:0;min-width:0}
+.estado-mapa{color:#51624e;font-size:.85rem;margin:0 0 8px}
+@media(max-width:700px){.distribucion-mapa{grid-template-columns:minmax(0,1fr);gap:10px}}
+
+.seccion-mapa{padding:clamp(14px,2.5vw,26px);background:#fcfdf8;border:1px solid #dce6d4;border-radius:24px}
+.seccion-mapa-cabecera{display:flex;align-items:center;gap:12px;padding-bottom:16px;margin-bottom:16px;border-bottom:1px solid #e1eadb}
+.seccion-mapa-cabecera p{margin:0}
+.distribucion-mapa .selectores-mapa{gap:18px;padding:18px;background:#f1f5e9;box-shadow:none}
+.distribucion-mapa .selectores-mapa .campo{margin:0;min-width:0}
+.distribucion-mapa .selectores-mapa select,.distribucion-mapa .buscador-mapa{height:48px;margin-top:6px;background-color:#fff}
+@media(min-width:701px){.distribucion-mapa .selectores-mapa{align-self:center}}
+
+.seccion-mapa-cabecera{border-radius:16px;padding:18px;background:linear-gradient(90deg,#f1f6eb 45%,#e7f2ddc0),url("/cultivos.jpg") right 62%/cover}
+.rotulo-control{display:flex;align-items:center;gap:9px;min-height:36px}
+.rotulo-control svg{box-sizing:content-box;padding:8px;border-radius:9px;background:#deedce;color:#2e5226;flex:none}
+.separador-mapa{display:flex;align-items:center;gap:10px;color:#566d4c;font-size:.85rem}
+.separador-mapa::before,.separador-mapa::after{content:"";height:1px;flex:1;background:#c7d6be}
+.ubicacion-panel{display:flex;align-items:center;justify-content:center;gap:9px;padding:10px;background:#315a25;color:#fff;font-weight:800}
+.ubicacion-panel:disabled{opacity:.72}
+.punto-mapa{display:flex;align-items:center;gap:14px;margin-top:16px;padding:14px;border:1px solid #d2e0c8;border-radius:16px;background:#eff5e9;font-weight:750;font-variant-numeric:tabular-nums}

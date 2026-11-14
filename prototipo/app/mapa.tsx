@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import type { FeatureCollection } from "geojson";
-import { Crosshair, LocateFixed, MapPin } from "lucide-react";
+import { LocateFixed, Map as MapIcon } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { maplibreGL } from "@maplibre/maplibre-gl-leaflet";
@@ -11,6 +11,7 @@ import { setWorkerUrl } from "maplibre-gl";
 import Buscador from "./buscador";
 
 const centro: L.LatLngTuple = [-17.3936, -66.1569];
+const cobertura = L.latLngBounds([-17.57, -66.30], [-17.23, -66.02]);
 const prioritarios = new Set(["9", "13", "15"]);
 const distritosDisponibles = Array.from({ length: 15 }, (_, i) => String(i + 1));
 export type Punto = { lat: number; lng: number };
@@ -20,16 +21,11 @@ export default function Mapa({ punto, seleccionar }: { punto: Punto | null; sele
   const mapa = useRef<L.Map | null>(null);
   const pin = useRef<L.CircleMarker | null>(null);
   const gps = useRef<L.LayerGroup | null>(null);
-  const distritos = useRef<L.GeoJSON | null>(null);
   const distritoEnfocado = useRef<string | null>(null);
   const extensiones = useRef(new Map<string, L.LatLngBounds>());
   const [distrito, setDistrito] = useState("");
-  const calles = useRef<L.MaplibreGL | null>(null);
-  const [mostrarCalles, setMostrarCalles] = useState(true);
   const accionManual = useRef(0);
-  const [detalle, setDetalle] = useState(false);
   const [capa, setCapa] = useState<"cargando" | "lista" | "error">("cargando");
-  const [limites, setLimites] = useState(true);
   const [estado, setEstado] = useState("");
   const [buscando, setBuscando] = useState(false);
 
@@ -53,6 +49,11 @@ export default function Mapa({ punto, seleccionar }: { punto: Punto | null; sele
     navigator.geolocation.getCurrentPosition(({ coords }) => {
       if (mapa.current !== instancia) return;
       const posicion: L.LatLngTuple = [coords.latitude, coords.longitude];
+      if (!cobertura.contains(posicion)) {
+        setBuscando(false);
+        setEstado("Estás fuera de la zona del mapa. Puedes buscar una dirección en Cochabamba.");
+        return;
+      }
       gps.current?.remove();
       gps.current = L.layerGroup([
         L.circle(posicion, { radius: coords.accuracy, color: "#60a5fa", weight: 1, interactive: false }),
@@ -70,14 +71,13 @@ export default function Mapa({ punto, seleccionar }: { punto: Punto | null; sele
   }
 
   useEffect(() => {
-    const instancia = L.map(contenedor.current!, { zoomControl: false, zoomSnap: 0.25 }).setView(centro, 12);
+    const instancia = L.map(contenedor.current!, { zoomControl: false, zoomSnap: 0.25, minZoom: 11.5, maxBounds: cobertura, maxBoundsViscosity: 1 }).setView(centro, 12);
     const clicsDistrito = new WeakSet<Event>();
     const extents = extensiones.current;
     mapa.current = instancia;
     function actualizarDetalle() {
       const cerca = instancia.getZoom() >= 13.5;
       instancia.getContainer().classList.toggle("mapa-en-detalle", cerca);
-      setDetalle(cerca);
     }
     instancia.on("zoomend", actualizarDetalle);
     L.control.zoom({ position: "bottomright", zoomInTitle: "Acercar", zoomOutTitle: "Alejar" }).addTo(instancia);
@@ -88,7 +88,7 @@ export default function Mapa({ punto, seleccionar }: { punto: Punto | null; sele
     const paneNombres = instancia.createPane("nombresCalles");
     paneNombres.style.zIndex = "350";
     paneNombres.style.pointerEvents = "none";
-    calles.current = maplibreGL({
+    maplibreGL({
       style: "/nombres-calles.json",
       attributionControl: false,
       pane: "nombresCalles"
@@ -104,7 +104,7 @@ export default function Mapa({ punto, seleccionar }: { punto: Punto | null; sele
       })
       .then(datos => {
         if (mapa.current !== instancia) return;
-        distritos.current = L.geoJSON(datos, {
+        L.geoJSON(datos, {
           bubblingMouseEvents: false,
           attribution: '<a href="https://hogaria.com/geo">Hogaria</a> · Ciudatos Lab · © OpenStreetMap · ODbL',
           style: f => prioritarios.has(String(f?.properties?.codigo_distrito))
@@ -164,9 +164,9 @@ export default function Mapa({ punto, seleccionar }: { punto: Punto | null; sele
     }).addTo(instancia);
   }, [punto]);
 
-  return <>
+  return <div className="distribucion-mapa">
     <div className="selectores-mapa">
-      <label className="campo">Seleccione su distrito
+      <label className="campo"><span className="rotulo-control"><MapIcon size={20} aria-hidden="true"/> Selecciona tu distrito</span>
         <select value={distrito} disabled={capa !== "lista"} onChange={e => {
           if (mapa.current) enfocarDistrito(mapa.current, e.target.value);
         }}>
@@ -174,6 +174,7 @@ export default function Mapa({ punto, seleccionar }: { punto: Punto | null; sele
           {distritosDisponibles.map(id => <option key={id} value={id}>Distrito {id}</option>)}
         </select>
       </label>
+      <div className="separador-mapa" aria-hidden="true">o</div>
       <Buscador ubicar={(lat, lng) => {
         accionManual.current++;
         distritoEnfocado.current = null;
@@ -181,44 +182,14 @@ export default function Mapa({ punto, seleccionar }: { punto: Punto | null; sele
         seleccionar({ lat, lng });
         mapa.current?.flyTo([lat, lng], 17, { duration: 0.55 });
       }}/>
+      <button className="ubicacion-panel" disabled={buscando} onClick={() => { if (mapa.current) ubicar(mapa.current); }}>
+        <LocateFixed size={20} aria-hidden="true"/> Usar mi ubicación
+      </button>
+      {capa === "error" && <p role="status">No se pudieron cargar los distritos.</p>}
+      {estado && <p className="estado-mapa" role="status">{estado}</p>}
     </div>
     <div className="visor">
       <div ref={contenedor} className="visor-mapa" aria-label="Mapa satelital interactivo de Cochabamba"/>
-      <div className="visor-botones">
-        <button disabled={buscando} onClick={() => { if (mapa.current) ubicar(mapa.current); }}><LocateFixed size={18}/> Mi ubicación</button>
-        <button onClick={() => {
-          distritoEnfocado.current = null;
-          setDistrito("");
-          accionManual.current++;
-          mapa.current?.setView(centro, 12);
-        }}><MapPin size={18}/> Cochabamba</button>
-      </div>
     </div>
-    <div className="visor-opciones">
-      <label><input type="checkbox" checked={limites} disabled={capa !== "lista"} onChange={e => {
-        setLimites(e.target.checked);
-        if (mapa.current && distritos.current) {
-          if (e.target.checked) distritos.current.addTo(mapa.current);
-          else distritos.current.remove();
-        }
-      }}/> Distritos</label>
-      <label><input type="checkbox" checked={mostrarCalles} onChange={e => {
-        setMostrarCalles(e.target.checked);
-        if (!mapa.current || !calles.current) return;
-        if (e.target.checked) calles.current.addTo(mapa.current);
-        else calles.current.remove();
-      }}/> Calles</label>
-      <button className="cuenta" onClick={() => {
-        const centroActual = mapa.current?.getCenter();
-        if (centroActual) seleccionar({ lat: centroActual.lat, lng: centroActual.lng });
-      }}><Crosshair size={17}/> Marcar centro</button>
-    </div>
-    {capa === "error" && <small className="subtitulo">No se pudo cargar la capa de distritos.</small>}
-    {capa === "lista" && limites && !detalle && <div className="leyenda-distritos">
-      <span><i className="muestra-prioritaria"/> Prioridad agrícola · D9, D13 y D15</span>
-      <span><i/> Otros distritos</span>
-      <small>El color indica prioridad del proyecto. El uso agrícola varía dentro de cada distrito.</small>
-    </div>}
-    <p role="status">{estado}</p>
-  </>;
+  </div>;
 }
