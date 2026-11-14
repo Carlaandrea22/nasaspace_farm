@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Field Shift | Prueba de cultivos y riego</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <style>
+    :root { font-family: "Instrument Sans", system-ui, sans-serif; color: #182e2a; background: #edf3ee; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { width: min(1180px, 100%); margin: auto; padding: clamp(12px, 4vw, 40px); }
+    h1 { font-size: clamp(1.8rem, 4vw, 2.9rem); letter-spacing: -.04em; margin: 0 0 8px; }
+    h2 { font-size: 1.3rem; margin: 0 0 12px; }
+    h3 { font-size: 1rem; margin: 0 0 5px; }
+    p, li { line-height: 1.55; }
+    a { color: #07594a; }
+    .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+    .panel { min-width: 0; background: white; border: 1px solid #cbd9d0; padding: 17px; border-radius: 10px; }
+    .wide { margin-top: 16px; }
+    #map { height: 390px; border-radius: 7px; background: #dce8df; cursor: crosshair; }
+    form { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin: 12px 0; }
+    label { display: grid; gap: 4px; font-size: .84rem; }
+    input, select, button { font: inherit; color: inherit; border: 1px solid #829d90; border-radius: 5px; padding: 7px; max-width: 100%; }
+    input { width: 9em; }
+    button { color: white; background: #175445; cursor: pointer; }
+    :focus-visible { outline: 2px solid #215ccb; outline-offset: 2px; }
+    .note { color: #465b55; font-size: .89rem; }
+    .crop { padding: 12px 0; border-top: 1px solid #d5e0d8; }
+    .crop p { margin: 4px 0; }
+    .crop.best { border-left: 3px solid #1a7257; padding-left: 10px; }
+    .reports { display: grid; gap: 10px; }
+    .reports p { margin: 4px 0; }
+    .table-wrap { overflow: auto; max-height: 330px; margin: 10px 0; }
+    table { width: 100%; border-collapse: collapse; font-size: .85rem; font-variant-numeric: tabular-nums; }
+    td, th { padding: 7px; text-align: right; white-space: nowrap; border-bottom: 1px solid #d5e0d8; }
+    th { background: #e8f0ea; position: sticky; top: 0; }
+    td:first-child, th:first-child { text-align: left; }
+    summary { cursor: pointer; font-weight: 650; }
+    @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } #map { height: 300px; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Field Shift Cochabamba</h1>
+  <p>Marca una parcela y compara los cultivos del piloto con los datos del lugar.</p>
+  <div class="grid">
+    <section class="panel" aria-label="Seleccionar parcela">
+      <div id="map" aria-label="Mapa de Cochabamba"></div>
+      <form id="plot">
+        <label>Latitud <input name="lat" type="number" step="any" min="-60" max="60" value="-17.45" required></label>
+        <label>Longitud <input name="lon" type="number" step="any" min="-180" max="180" value="-66.17" required></label>
+        <label>Año histórico <input name="year" type="number" min="2001" value="2025" required></label>
+        <label>Mes de interés
+          <select name="month">
+            <option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option>
+            <option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option>
+            <option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option>
+            <option value="10">Octubre</option><option value="11" selected>Noviembre</option><option value="12">Diciembre</option>
+          </select>
+        </label>
+        <label>Prioridad <select name="priority">
+          <option value="forraje">Producir forraje</option>
+          <option value="consumo">Venta o consumo</option>
+          <option value="cualquiera">Comparar todos</option>
+        </select></label>
+        <label>pH medido (opcional) <input name="ph" type="number" min="0" max="14" step=".1"></label>
+        <button>Analizar parcela</button>
+      </form>
+      <p class="note" id="map-note" hidden>Puedes consultar introduciendo las coordenadas.</p>
+    </section>
+    <section class="panel" aria-labelledby="heading-rank">
+      <h2 id="heading-rank">Cultivos para revisar</h2>
+      <p id="status" role="status">Elige un punto o analiza las coordenadas de ejemplo.</p>
+      <div id="ranking"></div>
+    </section>
+  </div>
+  <section class="panel wide" id="sources" hidden>
+    <h2>Datos consultados</h2>
+    <div class="reports" id="reports"></div>
+    <details id="history-details" hidden>
+      <summary>Ver serie diaria de NASA POWER</summary>
+      <div class="table-wrap"><table id="history-table" aria-label="Serie diaria de NASA POWER"></table></div>
+    </details>
+    <details id="forecast-details" hidden>
+      <summary>Ver pronóstico diario de Open-Meteo</summary>
+      <div class="table-wrap"><table id="forecast-table" aria-label="Pronóstico diario"></table></div>
+    </details>
+  </section>
+  <section class="panel wide" id="irrigation" hidden>
+    <h2>Próximo turno de riego</h2>
+    <p class="note">Los valores iniciales son supuestos de prueba. Introduce el déficit al inicio del primer día del pronóstico. El balance simplificado usa una etapa fija, demanda potencial y toda la lluvia prevista como aporte al suelo. <a href="https://www.fao.org/4/x0490e/x0490e0e.htm" target="_blank" rel="noopener">Método de referencia FAO-56</a>.</p>
+    <form id="water">
+      <label>Cultivo <select name="crop"></select></label>
+      <label>Etapa <select name="stage">
+        <option value="0">Inicial</option><option value="1" selected>Intermedia</option><option value="2">Final</option>
+      </select></label>
+      <label>Agua disponible total (mm) <input name="capacity" type="number" required min="1" max="500" step="any" value="60"></label>
+      <label>Déficit inicial (mm) <input name="deficit" type="number" required min="0" max="500" step="any" value="26"></label>
+      <label>Turno previsto <input name="turn" type="date" required></label>
+      <label>Riego neto previsto (mm) <input name="amount" type="number" required min="0" max="500" step="any" value="25"></label>
+      <label>Retraso de prueba (días) <input name="delay" type="number" required min="0" max="13" value="5"></label>
+      <button>Comparar turnos</button>
+    </form>
+    <p id="water-status" role="status"></p>
+    <details id="water-details" hidden>
+      <summary>Ver cálculo diario del agua en las raíces</summary>
+      <div class="table-wrap"><table id="water-table" aria-label="Balance diario del agua"></table></div>
+    </details>
+  </section>
+</main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+  const byId = id => document.getElementById(id);
+  const plot = byId('plot');
+  const water = byId('water');
+  const format = new Intl.NumberFormat('es-BO', { maximumFractionDigits: 2 });
+  let map;
+  let marker;
+  let analysisRequest;
+  let waterRequest;
+  let forecastDays = [];
+
+  function node(tag, text) {
+    const element = document.createElement(tag);
+    element.textContent = text;
+    return element;
+  }
+
+  function link(url, label) {
+    const element = node('a', label);
+    element.href = url;
+    element.target = '_blank';
+    element.rel = 'noopener noreferrer';
+    return element;
+  }
+
+  function renderTable(id, labels, rows) {
+    const header = document.createElement('thead');
+    header.insertRow().append(...labels.map(label => node('th', label)));
+    const body = document.createElement('tbody');
+    for (const row of rows) {
+      body.insertRow().append(...row.map(value =>
+        node('td', value == null ? '—' : typeof value === 'number' ? format.format(value) : value)));
+    }
+    byId(id).replaceChildren(header, body);
+  }
+
+  async function api(url, options) {
+    const response = await fetch(url, options);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'La consulta no se pudo completar.');
+    return data;
+  }
+
+  function renderRanking(crops, preferred) {
+    const leaders = crops.filter(crop => preferred.includes(crop.id));
+    const cont = byId('ranking');
+    cont.replaceChildren(node('p', leaders.length
+      ? (leaders.length === 1 ? 'Primera opción climática para revisar: ' : 'Opciones empatadas: ') +
+        leaders.map(crop => crop.name).join(', ') + '.'
+      : 'El mes consultado no favorece claramente a un cultivo para esa prioridad.'));
+    cont.append(node('p', 'Se ordena por menos días fuera de límites térmicos, más días en el rango óptimo y compatibilidad con el pH informado en caso de empate. Se usan medias diarias de un mes. La lluvia anual aporta contexto.'));
+    for (const crop of crops) {
+      const card = node('article', '');
+      card.className = preferred.includes(crop.id) ? 'crop best' : 'crop';
+      const t = crop.temperature;
+      const ph = crop.ph_match === null ? 'sin medición' : crop.ph_match ? 'en rango óptimo' : 'fuera del rango óptimo';
+      const rain = crop.rainfall.score === null ? 'sin año completo' : crop.rainfall.score ? 'en rango óptimo anual' : 'fuera del rango óptimo anual';
+      card.append(node('h3', crop.name + (crop.eligible ? '' : ' · fuera de tu prioridad')),
+        node('p', t.optimal_days + ' de ' + t.total_days + ' días en rango óptimo (' + crop.temp_opt.join('–') + ' °C). ' +
+          t.outside_days + ' fuera de los límites (' + crop.temp_limits.join('–') + ' °C).'),
+        node('p', 'Lluvia: ' + rain + ' (' + crop.rain_opt.join('–') + ' mm). pH: ' + ph + ' (' + crop.ph_opt.join('–') + ').'),
+        link(crop.source, 'Ficha EcoCrop de ' + crop.species));
+      cont.append(card);
+    }
+    const note = node('p', 'Comparación preliminar. Confirma la variedad, la ventana de siembra y la disponibilidad de riego.');
+    note.className = 'note';
+    cont.append(note);
+  }
+
+  function report(title, message, source) {
+    const block = node('div', '');
+    block.append(node('h3', title), node('p', message));
+    if (source) block.append(link(source, 'Abrir datos originales'));
+    byId('reports').append(block);
+  }
+
+  function renderAnalysis(data) {
+    const history = data.historical;
+    const future = data.forecast;
+    const imerg = data.imerg;
+    byId('sources').hidden = false;
+    byId('reports').replaceChildren();
+    if (history.error) {
+      report('NASA POWER', 'Fuente temporalmente indisponible. ' + history.error);
+      byId('status').textContent = 'Sin histórico de NASA POWER para calcular el filtro.';
+    } else {
+      report('NASA POWER', 'Media del mes: ' + (history.month_average ?? 'sin datos') + ' °C (' + history.temperature_days +
+        ' días). Lluvia anual: ' + (history.annual_rain == null ? 'serie incompleta' : format.format(history.annual_rain) + ' mm') + '.', history.url);
+      const codes = ['T2M', 'T2M_MIN', 'T2M_MAX', 'RH2M', 'PRECTOTCORR', 'GWETROOT', 'WS2M', 'ALLSKY_SFC_SW_DWN'];
+      renderTable('history-table', ['Fecha', ...codes], history.days.map(day => [day.date, ...codes.map(code => day[code])]));
+      byId('history-details').hidden = false;
+      byId('status').textContent = history.crops.length ? 'Análisis del mes seleccionado.' : 'Faltan días del mes para comparar cultivos.';
+      if (history.crops.length) renderRanking(history.crops, history.preferred);
+    }
+    if (imerg.error) {
+      report('NASA GPM IMERG Early', 'Muestra reciente no disponible. ' + imerg.error);
+    } else {
+      report('NASA GPM IMERG Early', format.format(imerg.rate) + ' mm/h en la muestra de media hora del ' +
+        imerg.time_utc.replace('T', ' ').slice(0, 16) + ' UTC. Contexto reciente; la simulación usa la serie diaria indicada.', imerg.url);
+    }
+    if (future.error) {
+      report('Open-Meteo', 'Pronóstico temporalmente indisponible. ' + future.error);
+      return;
+    }
+    forecastDays = future.days;
+    report('Open-Meteo', forecastDays.length + ' días de pronóstico para estimar el próximo turno.', future.url);
+    renderTable('forecast-table', ['Fecha', 'Lluvia (mm)', 'ET₀ (mm)', 'Máxima (°C)'],
+      forecastDays.map(day => [day.date, day.rain, day.et0, day.max_temp]));
+    byId('forecast-details').hidden = false;
+    water.elements.crop.replaceChildren(...data.crops.map(crop => new Option(crop.name, crop.id)));
+    if (history.preferred?.length === 1) water.elements.crop.value = history.preferred[0];
+    water.elements.turn.min = forecastDays[0].date;
+    water.elements.turn.max = forecastDays.at(-1).date;
+    water.elements.turn.value = forecastDays[Math.min(2, forecastDays.length - 1)].date;
+    byId('water-status').textContent = '';
+    byId('irrigation').hidden = false;
+  }
+
+  plot.addEventListener('submit', async event => {
+    event.preventDefault();
+    analysisRequest?.abort();
+    waterRequest?.abort();
+    const request = new AbortController();
+    analysisRequest = request;
+    const params = new URLSearchParams(new FormData(plot));
+    const point = [Number(params.get('lat')), Number(params.get('lon'))];
+    if (map) {
+      if (!marker) marker = L.circleMarker(point, { radius: 8, color: 'white', fillColor: '#147656', fillOpacity: 1 }).addTo(map);
+      marker.setLatLng(point);
+      if (!map.getBounds().contains(point)) map.panTo(point);
+    }
+    byId('status').textContent = 'Consultando NASA POWER, IMERG y Open-Meteo…';
+    byId('ranking').replaceChildren();
+    for (const id of ['sources', 'history-details', 'forecast-details', 'irrigation', 'water-details']) byId(id).hidden = true;
+    try {
+      const data = await api('/api/analisis?' + params, { signal: request.signal });
+      if (!request.signal.aborted) renderAnalysis(data);
+    } catch (error) {
+      if (!request.signal.aborted) byId('status').textContent = error.message;
+    }
+  });
+
+  water.addEventListener('submit', async event => {
+    event.preventDefault();
+    waterRequest?.abort();
+    const request = new AbortController();
+    waterRequest = request;
+    const body = Object.fromEntries(new FormData(water));
+    body.stage = Number(body.stage);
+    body.days = forecastDays;
+    byId('water-details').hidden = true;
+    byId('water-status').textContent = 'Calculando…';
+    try {
+      const data = await api('/api/riego', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body), signal: request.signal
+      });
+      if (request.signal.aborted) return;
+      const describe = scenario => scenario.stress_days
+        ? scenario.stress_days + ' días con estrés estimado, desde ' + scenario.first_stress
+        : 'sin estrés estimado dentro del pronóstico';
+      byId('water-status').textContent = 'Turno del ' + data.turn + ': ' + describe(data.scheduled) +
+        '. Turno del ' + data.later + ': ' + describe(data.delayed) + '. ';
+      if (data.scheduled.first_stress && data.scheduled.first_stress <= data.turn) {
+        byId('water-status').append('El turno previsto también presenta riesgo. Revisa la fecha y la cantidad con el regante. ');
+      }
+      if (data.delayed.stress_days > data.scheduled.stress_days) {
+        byId('water-status').append('Si el turno se retrasa, revisa la fecha con el regante.');
+      }
+      renderTable('water-table',
+        ['Fecha', 'Lluvia (mm)', 'Demanda (mm)', 'Umbral de déficit (mm)', 'Riego previsto (mm)', 'Déficit previsto (mm)', 'Riego retrasado (mm)', 'Déficit retrasado (mm)'],
+        data.scheduled.days.map((day, index) => {
+          const delayed = data.delayed.days[index];
+          return [day.date, day.rain, day.demand, day.threshold, day.irrigation, day.deficit, delayed.irrigation, delayed.deficit];
+        }));
+      byId('water-details').hidden = false;
+    } catch (error) {
+      if (!request.signal.aborted) byId('water-status').textContent = error.message;
+    }
+  });
+
+  if (window.L) {
+    map = L.map('map').setView([-17.45, -66.17], 13);
+    L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 18, attribution: 'Imágenes © Esri, Vantor, Earthstar Geographics y comunidad GIS'
+    }).addTo(map).on('tileerror', () => { byId('map-note').hidden = false; });
+    map.on('click', event => {
+      const point = event.latlng.wrap();
+      plot.elements.lat.value = point.lat.toFixed(5);
+      plot.elements.lon.value = point.lng.toFixed(5);
+      plot.requestSubmit();
+    });
+  } else {
+    byId('map').hidden = true;
+    byId('map-note').hidden = false;
+  }
+</script>
+</body>
+</html>

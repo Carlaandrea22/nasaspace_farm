@@ -1,0 +1,1 @@
+[   15603ms] [ERROR] Failed to load resource: the server responded with a status of 503 (Service Unavailable) @ https://power.larc.nasa.gov/api/temporal/daily/point?parameters=T2M%2CT2M_MIN%2CT2M_MAX%2CRH2M%2CPRECTOTCORR%2CGWETROOT%2CWS2M%2CALLSKY_SFC_SW_DWN&community=AG&latitude=-17.45735&longitude=-66.16689&start=20240101&end=20241231&format=JSON:1
