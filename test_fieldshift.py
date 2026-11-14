@@ -5,6 +5,14 @@ from fieldshift import historical, load_crops, rank_crops, simulate_water
 
 
 class FieldShiftTests(unittest.TestCase):
+    def test_full_catalog_loads_valid_non_pilot_species(self):
+        crops = load_crops(full=True)
+        self.assertGreater(len(crops), 2000)
+        self.assertTrue(any(crop["species"] == "Solanum tuberosum" for crop in crops))
+        for crop in crops:
+            self.assertEqual(sorted(crop["temp_limits"] + crop["temp_opt"]),
+                             [crop["temp_limits"][0], *crop["temp_opt"], crop["temp_limits"][1]])
+
     def test_temperature_categories_distinguish_near_optimum_from_large_deviations(self):
         haba = next(crop for crop in load_crops() if crop["name"] == "Haba")
         for days, expected in (

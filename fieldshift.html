@@ -66,7 +66,9 @@
         </select></label>
         <label>pH medido (opcional) <input name="ph" type="number" min="0" max="14" step=".1"></label>
         <button>Analizar parcela</button>
+        <button type="button" id="catalog-toggle" aria-pressed="false">Explorar todo EcoCrop</button>
       </form>
+      <p class="note" id="catalog-note" hidden>Exploración por temperatura. La prioridad se aplica en el catálogo del piloto.</p>
       <p class="note" id="map-note" hidden>Puedes consultar introduciendo las coordenadas.</p>
     </section>
     <section class="panel" aria-labelledby="heading-rank">
@@ -122,6 +124,7 @@
   let analysisRequest;
   let waterRequest;
   let forecastDays = [];
+  let fullCatalog = false;
 
   function node(tag, text) {
     const element = document.createElement(tag);
@@ -155,55 +158,75 @@
     return data;
   }
 
-  function renderRanking(crops, preferred, monthAverage) {
-    const leaders = crops.filter(crop => preferred.includes(crop.id));
+  function renderRanking(crops, preferred, monthAverage, full) {
+    const preferredIds = new Set(preferred);
+    const leaders = crops.filter(crop => preferredIds.has(crop.id));
     const hasConditional = crops.some(crop => crop.eligible && crop.temperature.category === 'conditional');
     const cont = byId('ranking');
     cont.replaceChildren(node('p', leaders.length
-      ? (leaders.length === 1 ? 'Mejor opción por temperatura: ' : 'Mismo ajuste por temperatura: ') +
+      ? (leaders.length > 5 ? leaders.length + ' fichas empatadas con el mejor ajuste térmico.' :
+        (leaders.length === 1 ? 'Mejor opción por temperatura: ' : 'Mismo ajuste por temperatura: ') +
         leaders.map(crop => crop.name).join(', ') + '.'
+        )
       : hasConditional ? 'Hay opciones que conviene revisar antes de sembrar.' :
-        'Para tu objetivo, el catálogo no ofrece una opción favorable por temperatura en este mes.'));
+        'Ninguna de las fichas evaluadas tiene un ajuste térmico favorable en este mes.'));
+    cont.append(node('p', full
+      ? 'Se evaluaron ' + format.format(crops.length) + ' fichas de EcoCrop con rangos térmicos utilizables.'
+      : 'Se evaluaron ' + crops.length + ' cultivos del piloto de La Maica: maíz forrajero, avena, cebada y haba.'));
     cont.append(node('p', 'Temperatura media histórica del lugar en el mes de siembra: ' +
       format.format(monthAverage) + ' °C.'));
     const labels = { recommended: 'Recomendado', conditional: 'Posible con reservas', unsuitable: 'No recomendado' };
-    for (const crop of crops) {
-      const card = node('article', '');
-      card.className = preferred.includes(crop.id) ? 'crop best' : 'crop';
-      const t = crop.temperature;
-      const ph = crop.ph_match === null ? 'sin medición' : crop.ph_match ? 'en rango óptimo' : 'fuera del rango óptimo';
-      const rain = crop.rainfall.score === null ? 'sin año completo' : crop.rainfall.score ? 'en rango óptimo anual' : 'fuera del rango óptimo anual';
-      const title = node('h3', crop.name);
-      const badge = node('span', labels[t.category]);
-      badge.className = 'rating ' + t.category;
-      title.append(badge);
-      const percent = format.format(100 * t.optimal_days / t.total_days) + ' %';
-      const exposure = [];
-      if (t.cold_days) exposure.push(t.cold_days + ' por debajo de ' + crop.temp_limits[0] + ' °C');
-      if (t.hot_days) exposure.push(t.hot_days + ' por encima de ' + crop.temp_limits[1] + ' °C');
-      const departures = [];
-      if (t.below_optimum_days) departures.push(t.below_optimum_days + ' por debajo');
-      if (t.above_optimum_days) departures.push(t.above_optimum_days + ' por encima');
-      card.append(title, node('p', 'Le favorecen ' + crop.temp_opt.join('–') + ' °C. El ' + percent +
-        ' de los días analizados estuvo en ese rango.'));
-      if (departures.length) card.append(node('p', 'Respecto a ese rango, hubo ' + departures.join(' y ') + ' días.'));
-      if (exposure.length) card.append(node('p', 'De esos días, ' + exposure.join(' y ') +
-        ' superaron los límites de referencia. El mayor desvío fue de ' + format.format(t.largest_excess) + ' °C.'));
-      if (t.category === 'conditional') card.append(node('p', 'El clima queda cerca del rango favorable. Puedes considerar esta opción y revisar si otra fecha le conviene más.'));
-      if (t.category === 'unsuitable' && t.outside_days <= t.total_days * 0.10 && t.largest_excess <= 2) {
-        card.append(node('p', 'La desviación media del rango favorable fue de ' + format.format(t.average_gap) +
-          ' °C, por encima de la tolerancia de 2 °C de esta prueba.'));
+    const cards = node('div', '');
+    const more = node('button', '');
+    more.type = 'button';
+    let shown = 0;
+    function showMore() {
+      const batch = crops.slice(shown, shown + 30);
+      for (const crop of batch) {
+        const card = node('article', '');
+        card.className = preferredIds.has(crop.id) ? 'crop best' : 'crop';
+        const t = crop.temperature;
+        const ph = crop.ph_match === null ? 'sin medición' : crop.ph_match ? 'en rango óptimo' : 'fuera del rango óptimo';
+        const rain = crop.rainfall.score === null ? 'sin año completo' : crop.rainfall.score ? 'en rango óptimo anual' : 'fuera del rango óptimo anual';
+        const title = node('h3', crop.name);
+        const badge = node('span', labels[t.category]);
+        badge.className = 'rating ' + t.category;
+        title.append(badge);
+        const percent = format.format(100 * t.optimal_days / t.total_days) + ' %';
+        const exposure = [];
+        if (t.cold_days) exposure.push(t.cold_days + ' por debajo de ' + crop.temp_limits[0] + ' °C');
+        if (t.hot_days) exposure.push(t.hot_days + ' por encima de ' + crop.temp_limits[1] + ' °C');
+        const departures = [];
+        if (t.below_optimum_days) departures.push(t.below_optimum_days + ' por debajo');
+        if (t.above_optimum_days) departures.push(t.above_optimum_days + ' por encima');
+        card.append(title, node('p', 'Le favorecen ' + crop.temp_opt.join('–') + ' °C. El ' + percent +
+          ' de los días analizados estuvo en ese rango.'));
+        if (departures.length) card.append(node('p', 'Respecto a ese rango, hubo ' + departures.join(' y ') + ' días.'));
+        if (exposure.length) card.append(node('p', 'De esos días, ' + exposure.join(' y ') +
+          ' superaron los límites de referencia. El mayor desvío fue de ' + format.format(t.largest_excess) + ' °C.'));
+        if (t.category === 'conditional') card.append(node('p', 'El clima queda cerca del rango favorable. Puedes considerar esta opción y revisar si otra fecha le conviene más.'));
+        if (t.category === 'unsuitable' && t.outside_days <= t.total_days * 0.10 && t.largest_excess <= 2) {
+          card.append(node('p', 'La desviación media del rango favorable fue de ' + format.format(t.average_gap) +
+            ' °C, por encima de la tolerancia de 2 °C de esta prueba.'));
+        }
+        if (!crop.eligible) card.append(node('p', 'Esta ficha está fuera del objetivo que elegiste.'));
+        const details = node('details', '');
+        details.append(node('summary', 'Ver datos y fuente'),
+          node('p', t.optimal_days + ' de ' + t.total_days + ' días dentro del rango favorable. Límites generales: ' +
+            crop.temp_limits.join('–') + ' °C.'),
+          node('p', 'Lluvia: ' + (crop.rain_opt ? rain + ' (' + crop.rain_opt.join('–') + ' mm)' : 'sin rango en la ficha') +
+            '. pH: ' + (crop.ph_opt ? ph + ' (' + crop.ph_opt.join('–') + ')' : 'sin rango en la ficha') + '.'),
+          link(crop.source, 'Ficha EcoCrop de ' + crop.species));
+        card.append(details);
+        cards.append(card);
       }
-      if (!crop.eligible) card.append(node('p', 'Esta ficha está fuera del objetivo que elegiste.'));
-      const details = node('details', '');
-      details.append(node('summary', 'Ver datos y fuente'),
-        node('p', t.optimal_days + ' de ' + t.total_days + ' días dentro del rango favorable. Límites generales: ' +
-          crop.temp_limits.join('–') + ' °C.'),
-        node('p', 'Lluvia: ' + rain + ' (' + crop.rain_opt.join('–') + ' mm). pH: ' + ph + ' (' + crop.ph_opt.join('–') + ').'),
-        link(crop.source, 'Ficha EcoCrop de ' + crop.species));
-      card.append(details);
-      cont.append(card);
+      shown += batch.length;
+      more.hidden = shown >= crops.length;
+      more.textContent = 'Mostrar más (' + format.format(shown) + ' de ' + format.format(crops.length) + ')';
     }
+    cont.append(cards, more);
+    more.addEventListener('click', showMore);
+    showMore();
     const note = node('p', 'Las categorías se basan en la temperatura histórica del mes de siembra. La elección final también depende de la variedad, el ciclo completo, el suelo y el riego.');
     note.className = 'note';
     cont.append(note);
@@ -241,7 +264,7 @@
       renderTable('history-table', ['Fecha', ...codes], history.days.map(day => [day.date, ...codes.map(code => day[code])]));
       byId('history-details').hidden = false;
       byId('status').textContent = history.crops.length ? 'Análisis del mes seleccionado.' : 'Faltan días del mes para comparar cultivos.';
-      if (history.crops.length) renderRanking(history.crops, history.preferred, history.month_average);
+      if (history.crops.length) renderRanking(history.crops, history.preferred, history.month_average, history.full_catalog);
     }
     if (imerg.error) {
       report('NASA GPM IMERG Early', 'Muestra reciente no disponible. ' + imerg.error);
@@ -259,13 +282,24 @@
       forecastDays.map(day => [day.date, day.rain, day.et0, day.max_temp]));
     byId('forecast-details').hidden = false;
     water.elements.crop.replaceChildren(...data.crops.map(crop => new Option(crop.name, crop.id)));
-    if (history.preferred?.length === 1) water.elements.crop.value = history.preferred[0];
+    if (history.preferred?.length === 1 && data.crops.some(crop => crop.id === history.preferred[0])) {
+      water.elements.crop.value = history.preferred[0];
+    }
     water.elements.turn.min = forecastDays[0].date;
     water.elements.turn.max = forecastDays.at(-1).date;
     water.elements.turn.value = forecastDays[Math.min(2, forecastDays.length - 1)].date;
     byId('water-status').textContent = '';
     byId('irrigation').hidden = false;
   }
+
+  byId('catalog-toggle').addEventListener('click', event => {
+    fullCatalog = !fullCatalog;
+    event.currentTarget.setAttribute('aria-pressed', String(fullCatalog));
+    event.currentTarget.textContent = fullCatalog ? 'Volver a los cultivos del piloto' : 'Explorar todo EcoCrop';
+    plot.elements.priority.disabled = fullCatalog;
+    byId('catalog-note').hidden = !fullCatalog;
+    plot.requestSubmit();
+  });
 
   plot.addEventListener('submit', async event => {
     event.preventDefault();
@@ -274,6 +308,7 @@
     const request = new AbortController();
     analysisRequest = request;
     const params = new URLSearchParams(new FormData(plot));
+    params.set('scope', fullCatalog ? 'full' : 'pilot');
     const point = [Number(params.get('lat')), Number(params.get('lon'))];
     if (map) {
       if (!marker) marker = L.circleMarker(point, { radius: 8, color: 'white', fillColor: '#147656', fillOpacity: 1 }).addTo(map);

@@ -32,19 +32,34 @@ PROFILES = {
 }
 
 
-def load_crops():
+def crop_range(row, lower, upper):
+    try:
+        low, high = float(row[lower]), float(row[upper])
+    except ValueError:
+        return None
+    if math.isfinite(low) and math.isfinite(high) and low <= high:
+        return [low, high]
+    return None
+
+
+def load_crops(full=False):
     with (ROOT / "DatosPlantas" / "EcoCrop_DB.csv").open(encoding="cp1252", newline="") as file:
         rows = {row["EcoPortCode"]: row for row in csv.DictReader(file)}
     crops = []
-    for code, (name, use, kc, depletion_fraction) in PROFILES.items():
+    for code in rows if full else PROFILES:
         row = rows[code]
+        species = row["ScientificName"]
+        optimum = crop_range(row, "TOPMN", "TOPMX")
+        limits = crop_range(row, "TMIN", "TMAX")
+        if not optimum or not limits or not limits[0] <= optimum[0] <= optimum[1] <= limits[1]:
+            continue
+        name, use, kc, depletion_fraction = PROFILES.get(code, (species, None, None, None))
         crops.append({
-            "id": code, "name": name, "species": row["ScientificName"], "use": use,
+            "id": code, "name": name, "species": species, "use": use,
             "source": f"https://ecocrop.apps.fao.org/ecocrop/srv/en/dataSheet?id={code}",
-            "temp_opt": [float(row[k]) for k in ("TOPMN", "TOPMX")],
-            "temp_limits": [float(row[k]) for k in ("TMIN", "TMAX")],
-            "rain_opt": [float(row[k]) for k in ("ROPMN", "ROPMX")],
-            "ph_opt": [float(row[k]) for k in ("PHOPMN", "PHOPMX")],
+            "temp_opt": optimum, "temp_limits": limits,
+            "rain_opt": crop_range(row, "ROPMN", "ROPMX"),
+            "ph_opt": crop_range(row, "PHOPMN", "PHOPMX"),
             "kc": kc, "p": depletion_fraction,
         })
     return crops
@@ -85,8 +100,10 @@ def assess_temperature(temperatures, optimum, limits):
 def rank_crops(crops, temperatures, annual_rain, ph, priority):
     results = []
     for crop in crops:
-        rain_ok = None if annual_rain is None else crop["rain_opt"][0] <= annual_rain <= crop["rain_opt"][1]
-        ph_ok = None if ph is None else crop["ph_opt"][0] <= ph <= crop["ph_opt"][1]
+        rain = crop["rain_opt"]
+        soil = crop["ph_opt"]
+        rain_ok = rain[0] <= annual_rain <= rain[1] if rain and annual_rain is not None else None
+        ph_ok = soil[0] <= ph <= soil[1] if soil and ph is not None else None
         results.append({
             **crop,
             "eligible": priority in ("cualquiera", crop["use"]),
@@ -123,7 +140,7 @@ def fetch(url, **params):
         return json.load(response), query
 
 
-def historical(lat, lon, first_year, last_year, month, ph, priority):
+def historical(lat, lon, first_year, last_year, month, ph, priority, full=False):
     data, query = fetch(POWER, parameters=",".join(VARIABLES), community="AG",
                         latitude=lat, longitude=lon, start=f"{first_year}0101",
                         end=f"{last_year}1231", format="JSON", **{"time-standard": "LST"})
@@ -157,7 +174,7 @@ def historical(lat, lon, first_year, last_year, month, ph, priority):
             annual_totals.append(sum(year_rain))
 
     annual_rain = round(mean(annual_totals), 2) if annual_totals else None
-    crops = rank_crops(load_crops(), temperatures, annual_rain, ph, priority) if temperatures else []
+    crops = rank_crops(load_crops(full), temperatures, annual_rain, ph, priority) if temperatures else []
     preferred = []
     if crops and crops[0]["eligible"] and crops[0]["temperature"]["category"] == "recommended":
         preferred = [crop["id"] for crop in crops if crop_order(crop) == crop_order(crops[0])]
@@ -165,7 +182,7 @@ def historical(lat, lon, first_year, last_year, month, ph, priority):
             "month_average": round(mean(temperatures), 2) if temperatures else None,
             "temperature_days": len(temperatures), "temperature_years": temperature_years,
             "rain_years": len(annual_totals), "first_year": first_year, "last_year": last_year,
-            "crops": crops, "preferred": preferred}
+            "crops": crops, "preferred": preferred, "full_catalog": full}
 
 
 def forecast(lat, lon):
@@ -238,9 +255,14 @@ def analyze(params):
     priority = params.get("priority", ["cualquiera"])[0]
     if priority not in ("forraje", "consumo", "cualquiera"):
         raise ValueError("Prioridad desconocida.")
+    scope = params.get("scope", ["pilot"])[0]
+    if scope not in ("pilot", "full"):
+        raise ValueError("Catálogo desconocido.")
+    full = scope == "full"
     with ThreadPoolExecutor(3) as pool:
         history = pool.submit(available, historical, lat, lon,
-                              last_year - HISTORY_YEARS + 1, last_year, planting_date.month, ph, priority)
+                              last_year - HISTORY_YEARS + 1, last_year, planting_date.month, ph,
+                              "cualquiera" if full else priority, full)
         upcoming = pool.submit(available, forecast, lat, lon)
         imerg = pool.submit(available, imerg_sample, lat, lon)
         return {"historical": history.result(), "forecast": upcoming.result(),
