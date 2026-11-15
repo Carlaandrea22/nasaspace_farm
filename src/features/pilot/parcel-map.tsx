@@ -4,21 +4,21 @@ import type { FeatureCollection, GeoJsonObject, MultiPolygon, Polygon } from "ge
 import * as L from "leaflet";
 import { maplibreGL } from "@maplibre/maplibre-gl-leaflet";
 import { setWorkerUrl } from "maplibre-gl";
-import { LocateFixed, Map as MapIcon, MapPin } from "lucide-react";
-import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
+import { Crop, Crosshair, Layers2, MapPinned } from "lucide-react";
+import { useCallback, useEffect, useEffectEvent, useId, useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
 import { NativeSelect } from "../../components/ui/native-select";
 import { getReferenceCase } from "../territory/reference";
 import { layerNames, type TerritoryLayer } from "../territory/types";
 import { inMap, type Coordinates } from "./draft";
-import { PlaceSearch } from "./place-search";
 import "leaflet/dist/leaflet.css";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 const recorteTunari = [[-17.349, -66.166], [-17.332, -66.143]];
 const city: L.LatLngTuple = [-17.3936, -66.1569];
 const cityBounds = L.latLngBounds([-17.59, -66.31], [-17.23, -66.01]);
-const overviewOptions = { padding: L.point(19, 19), animate: false };
+const overviewPadding = L.point(38, 38);
+const zoomSnap = 0.25;
 const primaryDistricts = new Set(["9", "13", "15"]);
 const outlineCorners = 4;
 const clickDelayMs = 500;
@@ -34,6 +34,19 @@ type MapProps = {
 
 function point({ latitude, longitude }: Coordinates): L.LatLngTuple {
   return [latitude, longitude];
+}
+
+function overviewZoom(map: L.Map) {
+  const available = map.getSize().subtract(overviewPadding);
+  const extent = map.project(cityBounds.getSouthEast(), 0).subtract(map.project(cityBounds.getNorthWest(), 0));
+  const scale = Math.min(Math.max(1, available.x) / extent.x, Math.max(1, available.y) / extent.y);
+  const step = L.Browser.any3d ? zoomSnap : 1;
+  // Recalculate without the previous minimum so the overview can adapt to a smaller viewport.
+  return Math.max(8, Math.floor(map.getScaleZoom(scale, 0) / step) * step);
+}
+
+function showCityOverview(map: L.Map) {
+  map.setView(cityBounds.getCenter(), map.getMinZoom(), { animate: false });
 }
 
 function pilotRegion(location: Coordinates) {
@@ -57,11 +70,10 @@ function currentView(map: L.Map) {
 }
 
 export default function ParcelMap({ selected, onSelect, onView, overview, outline, onOutline }: MapProps) {
+  const gestureHint = useId();
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const marker = useRef<L.CircleMarker | null>(null);
-  const gps = useRef<L.LayerGroup | null>(null);
-  const manualAction = useRef(0);
   const pendingClick = useRef<number | undefined>(undefined);
   const districtBounds = useRef(new Map<string, L.LatLngBounds>());
   const focusedDistrict = useRef("");
@@ -69,18 +81,18 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
   const [vertices, setVertices] = useState<Coordinates[]>([]);
   const [drawError, setDrawError] = useState("");
   const [districts, setDistricts] = useState<District[]>([]);
+  const [districtLayer, setDistrictLayer] = useState<L.GeoJSON<District>>();
   const [district, setDistrict] = useState("");
   const [showDistricts, setShowDistricts] = useState(true);
   const [districtError, setDistrictError] = useState(false);
   const [online, setOnline] = useState(() => navigator.onLine);
   const [satellite, setSatellite] = useState(overview);
   const [satelliteError, setSatelliteError] = useState(false);
-  const [locationStatus, setLocationStatus] = useState("");
-  const [locating, setLocating] = useState(false);
   const [baseResult, setBaseResult] = useState<{ region: string; status: "ready" | "error" }>();
   const [layer, setLayer] = useState<TerritoryLayer | "">("");
   const [overlayError, setOverlayError] = useState(false);
   const handleTerrain = useEffectEvent((coords: Coordinates) => {
+    if (!cityBounds.contains(point(coords))) return;
     if (drawing) {
       if (vertices.length >= outlineCorners) return;
       const next = [...vertices, coords];
@@ -113,15 +125,22 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
     if (!container.current) return;
     const initial = initialPoint();
     const map = L.map(container.current, {
-      zoomSnap: 0.25,
-      minZoom: 8,
+      zoomSnap,
       maxZoom: 18,
-      scrollWheelZoom: false,
+      maxBounds: cityBounds,
+      maxBoundsViscosity: 1,
+      scrollWheelZoom: true,
+      wheelPxPerZoomLevel: 100,
+      touchZoom: true,
+      bounceAtZoomLimits: false,
       zoomAnimation: false,
       markerZoomAnimation: false,
       zoomControl: false,
-    }).setView(initial ? point(initial) : city, initial ? 15 : 12);
-    if (!initial) map.fitBounds(cityBounds, overviewOptions);
+      trackResize: false,
+    });
+    map.setMinZoom(overviewZoom(map));
+    if (initial && cityBounds.contains(point(initial))) map.setView(point(initial), 15);
+    else showCityOverview(map);
     mapRef.current = map;
     map.createPane("districts").style.zIndex = "425";
     const streetLabels = map.createPane("streetLabels");
@@ -138,13 +157,9 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
       interactive: false, pane: "parcel-point",
     }).addTo(map);
 
-    map.on("dragstart zoomstart dblclick", () => {
-      cancelMapClick();
-      manualAction.current += 1;
-    });
+    map.on("dragstart zoomstart dblclick", cancelMapClick);
     map.on("click", (event: L.LeafletMouseEvent) => {
       const { latlng } = event;
-      manualAction.current += 1;
       afterSingleClick(event, () => handleTerrain({ latitude: latlng.lat, longitude: latlng.lng }));
     });
     function updateLabels() {
@@ -158,7 +173,14 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
     const onNetwork = () => setOnline(navigator.onLine);
     window.addEventListener("online", onNetwork);
     window.addEventListener("offline", onNetwork);
-    const resize = new ResizeObserver(() => map.invalidateSize({ pan: false }));
+    const resize = new ResizeObserver(() => {
+      const atOverview = map.getZoom() === map.getMinZoom();
+      map.invalidateSize({ animate: false });
+      const minimum = overviewZoom(map);
+      if (minimum === map.getMinZoom()) return;
+      map.setMinZoom(minimum);
+      if (atOverview) showCityOverview(map);
+    });
     resize.observe(container.current);
     return () => {
       window.removeEventListener("online", onNetwork);
@@ -166,7 +188,6 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
       resize.disconnect();
       cancelMapClick();
       marker.current = null;
-      gps.current = null;
       mapRef.current = null;
       map.remove();
     };
@@ -174,9 +195,8 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !showDistricts) return;
+    if (!map) return;
     const controller = new AbortController();
-    let districtsOnMap: L.GeoJSON | undefined;
     fetch("/maps/cochabamba-distritos.geojson", { signal: controller.signal })
       .then((response) => {
         if (!response.ok) throw new Error("Distritos no disponibles");
@@ -184,7 +204,7 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
       })
       .then((data) => {
         if (controller.signal.aborted) return;
-        districtsOnMap = L.geoJSON<District>(data, {
+        const polygons = L.geoJSON<District>(data, {
           pane: "districts",
           attribution: '<a href="https://hogaria.com/geo">Hogaria</a> · Ciudatos Lab · <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap · ODbL</a>',
           style: (feature) => {
@@ -202,7 +222,6 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
             shape.bindTooltip(label, { direction: "center", permanent: true, interactive: false, className: "district-label" + (highlighted ? " priority-district" : "") });
             shape.on("click", (event: L.LeafletMouseEvent) => {
               const { latlng } = event;
-              manualAction.current += 1;
               afterSingleClick(event, () => {
                 if (!isDrawing() && map.getZoom() < 13.5 && focusedDistrict.current !== info.codigo_distrito) {
                   focus(info.codigo_distrito);
@@ -212,16 +231,21 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
               });
             });
           },
-        }).addTo(map);
+        });
+        setDistrictLayer(polygons);
         setDistricts(data.features.map(({ properties }) => properties).sort((a, b) => Number(a.codigo_distrito) - Number(b.codigo_distrito)));
         setDistrictError(false);
       })
       .catch(() => { if (!controller.signal.aborted) setDistrictError(true); });
-    return () => {
-      controller.abort();
-      districtsOnMap?.remove();
-    };
-  }, [afterSingleClick, showDistricts]);
+    return () => controller.abort();
+  }, [afterSingleClick]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !districtLayer || !showDistricts) return;
+    districtLayer.addTo(map);
+    return () => { districtLayer.remove(); };
+  }, [districtLayer, showDistricts]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -337,7 +361,6 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
       marker.current.setStyle({ opacity: 0, fillOpacity: 0 });
       return;
     }
-    manualAction.current += 1;
     const latlng: L.LatLngTuple = [latitude, longitude];
     const alreadyMarked = marker.current.options.opacity === 1 && marker.current.getLatLng().equals(latlng);
     marker.current.setLatLng(latlng).setStyle({ opacity: 1, fillOpacity: 1 });
@@ -370,72 +393,26 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
   }, [layer]);
 
   function focusDistrict(code: string) {
+    cancelMapClick();
     setDistrict(code);
     focusedDistrict.current = code;
     const map = mapRef.current;
     if (!map) return;
-    manualAction.current += 1;
     const bounds = districtBounds.current.get(code);
     if (bounds) map.fitBounds(bounds, { padding: [24, 24], maxZoom: 16, animate: false });
-    else map.fitBounds(cityBounds, overviewOptions);
-  }
-
-  function locatePlace(coords: Coordinates) {
-    manualAction.current += 1;
-    setDistrict("");
-    focusedDistrict.current = "";
-    onSelect(coords);
-    const map = mapRef.current;
-    if (!map) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) map.setView(point(coords), 17, { animate: false });
-    else map.flyTo(point(coords), 17, { duration: 0.55 });
-  }
-
-  function locate() {
-    const map = mapRef.current;
-    if (!map || !navigator.geolocation) {
-      setLocationStatus("La ubicación no está disponible en este navegador.");
-      return;
-    }
-    const requestVersion = manualAction.current;
-    setLocating(true);
-    setLocationStatus("Buscando tu ubicación…");
-    navigator.geolocation.getCurrentPosition(({ coords }) => {
-      if (mapRef.current !== map) return;
-      setLocating(false);
-      const position: L.LatLngTuple = [coords.latitude, coords.longitude];
-      if (!cityBounds.contains(position)) {
-        setLocationStatus("Tu ubicación está fuera de la vista de Cochabamba.");
-        return;
-      }
-      gps.current?.remove();
-      gps.current = L.layerGroup([
-        L.circle(position, { radius: coords.accuracy, color: "#60a5fa", weight: 1, interactive: false }),
-        L.circleMarker(position, { radius: 8, color: "white", weight: 3, fillColor: "#2563eb", fillOpacity: 1, interactive: false }),
-      ]).addTo(map);
-      if (manualAction.current === requestVersion) map.setView(position, coords.accuracy < 100 ? 17 : 15, { animate: false });
-      setLocationStatus("El punto azul indica tu ubicación aproximada. Toca el terreno para elegir tu parcela.");
-    }, () => {
-      if (mapRef.current !== map) return;
-      setLocating(false);
-      setLocationStatus("No se pudo obtener tu ubicación. Puedes marcar un punto a mano.");
-    }, { timeout: 8000, maximumAge: 60000 });
+    else showCityOverview(map);
   }
 
   return (
     <div className={overview ? "map-distribution" : "panel"}>
-      <div className={overview ? "map-controls" : "mb-3 grid gap-3 sm:grid-cols-2"}>
-        <div className="grid min-w-0 content-start gap-1">
-          <label className="map-control-label" htmlFor="district-selector"><MapIcon size={20} aria-hidden="true" /> Selecciona tu distrito</label>
-          <NativeSelect id="district-selector" value={district} onChange={(event) => focusDistrict(event.target.value)}>
-            <option value="">Todo Cochabamba</option>
+      <div className={overview ? "map-controls" : "mb-3 grid items-end gap-3 sm:grid-cols-2"}>
+        <div className="map-district grid min-w-0 gap-1.5">
+          <label className="map-control-label" htmlFor="district-selector"><Layers2 size={18} aria-hidden="true" /> Selecciona tu distrito</label>
+          <NativeSelect id="district-selector" value={district} aria-busy={!districtLayer && !districtError} disabled={!districts.length} onChange={(event) => focusDistrict(event.target.value)}>
+            <option value="">{districtLayer ? "Todo Cochabamba" : districtError ? "Distritos no disponibles" : "Cargando distritos…"}</option>
             {districts.map((info) => <option key={info.codigo_distrito} value={info.codigo_distrito}>{info.nombre}</option>)}
           </NativeSelect>
         </div>
-        {overview && <>
-          <div className="map-separator" aria-hidden="true">o</div>
-          <PlaceSearch bounds={cityBounds} online={online} onLocate={locatePlace} />
-        </>}
         {!overview && <div className="grid content-start gap-1">
           <label className="text-sm font-semibold" htmlFor="gamc-layer-selector">Capa GAMC</label>
           <NativeSelect id="gamc-layer-selector" value={layer} onChange={(event) => {
@@ -446,22 +423,20 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
             {Object.entries(layerNames).map(([key, name]) => <option key={key} value={key}>{name}</option>)}
           </NativeSelect>
         </div>}
-        <Button type="button" className="map-location" onClick={locate} disabled={locating}><LocateFixed size={20} aria-hidden="true" /> Usar mi ubicación</Button>
-        {(drawing || Boolean(outline?.length)) && <div className="grid gap-1.5 text-center text-sm text-muted">
+        <div className="grid gap-2">
+          {drawing ? (
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" disabled={!vertices.length} onClick={() => { setVertices(v => v.slice(0, -1)); setDrawError(""); }}>Deshacer</Button>
+              <Button type="button" variant="secondary" onClick={() => { setDrawing(false); setDrawError(""); }}>Cancelar</Button>
+            </div>
+          ) : <Button type="button" variant="secondary" onClick={() => { setVertices([]); setDrawError(""); setDrawing(true); }}><Crop size={17} aria-hidden="true" /> {outline?.length ? "Volver a dibujar" : "Dibujar parcela"}</Button>}
+        </div>
+        {(drawing || Boolean(outline?.length)) && <div className="grid gap-1.5 text-sm text-muted sm:col-span-2">
           <p role="status">{drawing ? `${vertices.length} de ${outlineCorners} puntos marcados` : "4 de 4 puntos · Contorno cerrado"}</p>
           <progress className="map-outline-progress" aria-label="Puntos del contorno" value={drawing ? vertices.length : outlineCorners} max={outlineCorners} />
           {drawing && <p>Toca las esquinas en orden.</p>}
         </div>}
-        <div className="grid gap-2">
-          {drawing ? <>
-            <div className="flex flex-wrap justify-center gap-2">
-              <Button type="button" variant="secondary" disabled={!vertices.length} onClick={() => { setVertices(v => v.slice(0, -1)); setDrawError(""); }}>Deshacer</Button>
-              <Button type="button" variant="secondary" onClick={() => { setDrawing(false); setDrawError(""); }}>Cancelar</Button>
-            </div>
-          </> : <Button type="button" variant="secondary" onClick={() => { setVertices([]); setDrawError(""); setDrawing(true); }}>{outline?.length ? "Volver a dibujar" : "Dibujar parcela"}</Button>}
-        </div>
-        {drawError && <p role="alert" className="text-center text-sm text-red-800">{drawError}</p>}
-        {locationStatus && <p className="text-center text-sm text-muted" role="status">{locationStatus}</p>}
+        {drawError && <p role="alert" className="text-sm text-red-800 sm:col-span-2">{drawError}</p>}
       </div>
       <div className="min-w-0">
         <div className="isolate overflow-hidden rounded-[22px]">
@@ -469,24 +444,29 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
             ref={container}
             role="region"
             aria-label={overview ? "Mapa de Cochabamba" : region === "la-maica" ? "Mapa de La Maica" : region === "tunari" ? "Mapa de Tirani" : "Mapa de la parcela"}
+            aria-describedby={gestureHint}
             data-overview={overview}
             className="parcel-viewport"
           />
         </div>
-        <div className="mt-1 flex flex-wrap gap-x-4 text-sm font-semibold">
+        <p id={gestureHint} className="map-gesture-hint">
+          <span className="map-gesture-hint-pointer">Usa la rueda sobre el mapa para acercar o alejar.</span>
+          <span className="map-gesture-hint-touch">Pellizca con dos dedos para acercar o alejar. Arrastra para moverte.</span>
+        </p>
+        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-2 text-sm font-semibold">
           <label className="inline-flex min-h-11 items-center gap-1.5"><input type="checkbox" className="size-4 accent-action" checked={showDistricts} onChange={(event) => setShowDistricts(event.target.checked)} /> Distritos</label>
           <label className="inline-flex min-h-11 items-center gap-1.5"><input type="checkbox" className="size-4 accent-action" checked={satellite && online} disabled={!online} onChange={(event) => {
             setSatelliteError(false);
             setSatellite(event.target.checked);
           }} /> Satélite</label>
-          <Button type="button" variant="secondary" className="sm:ml-auto" onClick={() => {
+          <Button type="button" variant="secondary" className="max-sm:flex-auto sm:ml-auto" onClick={() => {
             setShowDistricts(true);
             focusDistrict("");
-          }}><MapIcon size={17} aria-hidden="true" /> Ver todos los distritos</Button>
-          <Button type="button" variant="secondary" onClick={() => {
+          }}><MapPinned size={17} aria-hidden="true" /> Ver todos los distritos</Button>
+          <Button type="button" variant="secondary" className="max-sm:flex-auto" onClick={() => {
             const center = mapRef.current?.getCenter();
             if (center) onSelect({ latitude: center.lat, longitude: center.lng });
-          }}><MapPin size={17} aria-hidden="true" /> Marcar centro</Button>
+          }}><Crosshair size={17} aria-hidden="true" /> Marcar centro</Button>
         </div>
         {districtError && showDistricts && <p role="status" className="mt-2 text-sm text-muted">No se pudieron cargar los distritos de referencia.</p>}
         {satellite && (!online || satelliteError) && <p role="status" className="mt-2 text-sm text-muted">Imágenes satelitales no disponibles. El mapa local sigue activo.</p>}

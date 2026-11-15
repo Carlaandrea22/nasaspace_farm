@@ -9,9 +9,10 @@ const buildAssets = staticFiles
 
 const browserAssets = [
   "/manifest.webmanifest",
-  "/icons/field-shift-180.png",
-  "/icons/field-shift-192.png",
-  "/icons/field-shift-512.png",
+  "/icons/yaku-mark-180.png",
+  "/icons/yaku-mark-192.png",
+  "/icons/yaku-mark-512.png",
+  "/fonts/young-serif-yaku.woff2",
   "/images/valle-cochabamba.jpg",
   "/images/carla-valle.webp",
   "/images/carla-cultivos.jpg",

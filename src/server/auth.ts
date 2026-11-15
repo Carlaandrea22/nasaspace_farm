@@ -28,7 +28,7 @@ async function configureAuth() {
   }
 
   const options = {
-    appName: "Agua y Siembra",
+    appName: "Yaku",
     database: pool,
     baseURL,
     trustedOrigins,

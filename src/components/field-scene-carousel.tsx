@@ -65,7 +65,7 @@ export function FieldSceneCarousel() {
     <section
       ref={root}
       className="field-carousel"
-      aria-label="Escenas de Agua y Siembra"
+      aria-label="Escenas de Yaku"
       aria-roledescription="carrusel"
       data-playing={rotating}
       onPointerEnter={(event) => { if (event.pointerType === "mouse") setHovered(true); }}

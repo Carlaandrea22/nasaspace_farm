@@ -96,7 +96,7 @@ function NoticeSettings({ entries }: { entries: Notice[] }) {
         try {
           if (localStorage.getItem(tag)) continue;
           sending.add(tag);
-          await registration.showNotification(notice.title, { body: notice.body, icon: "/icons/field-shift-192.png", tag });
+          await registration.showNotification(notice.title, { body: notice.body, icon: "/icons/yaku-mark-192.png", tag });
           localStorage.setItem(tag, "sent");
         } catch {
           if (active) setStatus("El navegador no entregó el aviso. Puedes consultarlo aquí.");

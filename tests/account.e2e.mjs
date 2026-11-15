@@ -13,7 +13,7 @@ test("cuenta de prueba guarda y recupera un borrador sin mezclar el modo invitad
     page.setDefaultTimeout(10000);
     await page.goto(origin);
     assert.equal(await page.getByRole("link", { name: "Ir al mapa", exact: true }).count(), 0);
-    const carousel = page.getByRole("region", { name: "Escenas de Agua y Siembra" });
+    const carousel = page.getByRole("region", { name: "Escenas de Yaku" });
     assert.equal(await carousel.getByRole("button", { name: /Pausar|Reproducir/i }).count(), 0);
     await carousel.getByRole("button", { name: "Planifica tu riego" }).waitFor();
     await page.waitForFunction(() => document.querySelector(".field-carousel").dataset.playing === "true");
@@ -25,6 +25,7 @@ test("cuenta de prueba guarda y recupera un borrador sin mezclar el modo invitad
     assert.match(await dialog.evaluate((element) => getComputedStyle(element, "::backdrop").backdropFilter), /blur/);
     await dialog.getByRole("button", { name: "Continuar como invitado" }).click();
     await dialog.waitFor({ state: "hidden" });
+    await page.getByRole("button", { name: "Abrir menú" }).click();
     await page.getByRole("link", { name: "Mis parcelas" }).click();
     const name = (target) => target.getByLabel("Nombre de la parcela (opcional)");
     await name(page).fill("Parcela invitada");
@@ -95,6 +96,7 @@ test("cuenta de prueba guarda y recupera un borrador sin mezclar el modo invitad
     await account.click();
     await page.getByRole("button", { name: "Cerrar sesión" }).click();
     await page.getByRole("button", { name: "Iniciar sesión" }).waitFor();
+    await page.getByRole("button", { name: "Abrir menú" }).click();
     await page.getByRole("link", { name: "Mis parcelas" }).click();
     assert.equal(await name(page).inputValue(), "Parcela invitada");
   } finally {

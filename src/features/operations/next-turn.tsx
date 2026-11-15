@@ -195,7 +195,7 @@ function Inspection({ sheet }: { sheet: NonNullable<ReturnType<typeof buildInspe
     const url = URL.createObjectURL(new Blob([sheet.text], { type: "text/plain;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = `field-shift-inspeccion-${sheet.date}.txt`;
+    link.download = `yaku-inspeccion-${sheet.date}.txt`;
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }

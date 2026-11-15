@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
+import Image from "next/image";
 import type { ReactNode } from "react";
-import { Sprout } from "lucide-react";
 import { AccountDialog } from "../components/account-dialog";
 import { AppNavigation } from "../components/app-navigation";
 import { ServiceWorkerRegistration } from "../lib/browser/service-worker-registration";
@@ -8,11 +8,11 @@ import "@fontsource-variable/dm-sans/wght.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: { default: "Agua y Siembra | Field Shift", template: "%s | Agua y Siembra" },
+  title: { default: "Yaku", template: "%s | Yaku" },
   description: "Decisiones de cultivo y riego en Cochabamba.",
   icons: {
-    icon: "/icons/field-shift-192.png",
-    apple: "/icons/field-shift-180.png",
+    icon: "/icons/yaku-mark-192.png",
+    apple: "/icons/yaku-mark-180.png",
   },
 };
 
@@ -25,16 +25,18 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <a className="skip-link" href="#contenido">Ir al contenido</a>
         <header className="site-header">
           <div className="header-inner">
-            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-            <a className="brand" href="/" aria-label="Agua y Siembra, inicio">
-              <span className="brand-mark"><Sprout size={24} aria-hidden="true" /></span>
-              <span><strong>Agua y Siembra</strong><small>Cochabamba</small></span>
-            </a>
+            <div className="header-start">
+              <AppNavigation />
+              {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+              <a className="brand" href="/" aria-label="Yaku, inicio">
+                <Image className="brand-mark" src="/icons/yaku-mark-192.png" alt="" width={44} height={44} loading="eager" unoptimized />
+                <span><strong>Yaku</strong><small>Cochabamba</small></span>
+              </a>
+            </div>
             <AccountDialog />
           </div>
         </header>
         <div className="app-frame">
-          <AppNavigation />
           <main id="contenido" tabIndex={-1}>{children}</main>
         </div>
         <ServiceWorkerRegistration />

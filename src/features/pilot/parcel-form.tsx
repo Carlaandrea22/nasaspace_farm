@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { ArrowRight, MapPin } from "lucide-react";
+import { ArrowRight, CircleDot, MapPinned } from "lucide-react";
 import { useState, type SubmitEvent } from "react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -95,10 +95,10 @@ function ParcelFields({ parcel, explore, account, save, status, markEdited }: { 
         <section aria-labelledby="map-title" className={explore ? "map-section" : "min-w-0"}>
           {explore ? (
             <header className="map-section-heading">
-              <span className="map-emblem"><MapPin size={22} aria-hidden="true" /></span>
+              <span className="map-emblem"><MapPinned size={22} aria-hidden="true" /></span>
               <div>
                 <h2 id="map-title">Encuentra tu parcela</h2>
-                <p>Busca una dirección o elige un distrito para acercarte.</p>
+                <p>Elige un distrito y marca tu terreno en el mapa.</p>
               </div>
             </header>
           ) : (
@@ -111,7 +111,7 @@ function ParcelFields({ parcel, explore, account, save, status, markEdited }: { 
             {mapOpen && <ParcelMap overview={explore} selected={mapPoint} onSelect={replacePoint} onView={setView} outline={pointChosen ? outline : undefined} onOutline={selectOutline} />}
           </div>
           <div className="map-selected">
-            <span className="map-emblem"><MapPin size={22} aria-hidden="true" /></span>
+            <span className="map-emblem"><CircleDot size={22} aria-hidden="true" /></span>
             <div className="min-w-0" role="status">
               <p>{mapPoint ? (outline ? "Parcela delimitada" : "Punto seleccionado") : "Selecciona un punto o dibuja tu parcela"}</p>
               {mapPoint && outline && decimal(area) > 0 && <p className="text-sm font-normal">Superficie aproximada: {decimal(area).toLocaleString("es-BO")} ha</p>}

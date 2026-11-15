@@ -7,7 +7,7 @@ export function ServiceWorkerRegistration() {
     if (process.env.NODE_ENV !== "production" || !("serviceWorker" in navigator)) return;
 
     navigator.serviceWorker.register("/sw.js").catch((error: unknown) => {
-      console.error("No se pudo preparar Field Shift para usar sin conexión.", error);
+      console.error("No se pudo preparar Yaku para usar sin conexión.", error);
     });
   }, []);
 
