@@ -4,7 +4,12 @@
     "longitude": -66.18272,
     "radiusKm": 4
   },
-  "days": {},
+  "days": {
+    "2026-11-11": 0.0,
+    "2026-11-12": 18.51,
+    "2026-11-13": 5.98
+  },
   "source": "https://gpm.nasa.gov/data/directory",
-  "timeStandard": "America/La_Paz"
+  "timeStandard": "America/La_Paz",
+  "version": "07C"
 }

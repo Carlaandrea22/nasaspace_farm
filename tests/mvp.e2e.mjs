@@ -90,7 +90,7 @@ test("el invitado guarda su parcela, compara escenarios y reabre el MVP sin red"
     await page.getByText("Primer día adicional de estrés", { exact: true }).first().waitFor();
     await page.getByText("¿Por qué?", { exact: true }).click();
     await page.getByRole("link", { name: "NASA POWER", exact: true }).waitFor();
-    await page.getByRole("link", { name: "API diaria de NASA POWER", exact: true }).waitFor();
+    await page.getByRole("link", { name: "IMERG Final V07B", exact: true }).waitFor();
     await page.getByText(/aporta [1-9]\d* días y POWER aporta 0 días/).waitFor();
     await page.getByText("Cambio al retrasar el turno del 26/05/2025 al 31/05/2025.", { exact: true }).waitFor();
     const evidence = page.getByRole("list", { name: "Efecto del retraso por cultivo" });

@@ -2,18 +2,18 @@
 
 Field Shift usa un corte regional reproducible para ensayar las rotaciones. Las coordenadas de referencia son **−17.42442, −66.18272**. Los archivos fuente y las credenciales se guardan fuera del repositorio. Importar resultados públicos de la referencia y recompilar con `docker compose up --build --detach --wait` incorpora el nuevo corte. Utiliza otro archivo o flujo local para extracciones de parcelas privadas.
 
-| Fuente | Estado al 14 de noviembre de 2026 | Qué usa la aplicación |
+| Fuente | Estado al 15 de noviembre de 2026 | Qué usa la aplicación |
 | --- | --- | --- |
 | NASA POWER | 304 días completos entre el 1 de noviembre de 2024 y el 31 de agosto de 2025, UTC. | Máxima, mínima, humedad, viento a 2 m y radiación para ET₀. PRECTOTCORR queda como respaldo donde falte IMERG Final. La altitud devuelta corresponde a la grilla de POWER. |
 | SoilGrids WCS | 24 coberturas verificadas, con cuatro propiedades y seis profundidades entre 0 y 200 cm. | Perfil de una celda válida a 227 m de la referencia. La celda en la coordenada de referencia carece de valores utilizables para el perfil. Los valores son predicciones regionales. |
-| GPM IMERG Final | NASA POWER devolvió los 304 días UTC del corte histórico con `IMERG_PRECTOT` en mm/día. La API identifica IMERG como fuente. | El balance da prioridad a IMERG Final. La comparación muestra su cobertura y enlaza la consulta original. |
-| GPM IMERG Early | La prueba de NASA GIS recuperó 6 de 144 muestras entre el 11 y el 13 de noviembre de 2026 en hora boliviana. El directorio PPS Early devolvió 401. | Se aplica en días recientes completos. El corte preparado usa la estimación de Open-Meteo cuando está disponible. |
+| GPM IMERG Final | 304 días UTC importados de los NetCDF originales de NASA GES DISC, colección `GPM_3IMERGDF` V07B, en mm/día. | El balance da prioridad a IMERG Final. La comparación muestra su versión y cobertura. |
+| GPM IMERG Early | 144 HDF5 originales V07C de NASA GES DISC, con 48 valores válidos por día del 11 al 13 de noviembre de 2026 en hora boliviana. | Agua usa los totales de IMERG Early cuando la fecha coincide con el corte local y el punto está dentro del radio de La Maica. Open-Meteo cubre los días sin Early. |
 | SMAP L4 v8 | El paquete de AppEEARS trae las dos variables, ocho intervalos de tres horas del 11 de noviembre de 2024 UTC y sus ocho granulos verificados en CMR. | Usa el promedio diario de humedad radicular junto con SoilGrids para iniciar la demo con 62,94 % del agua disponible. La humedad superficial se muestra como contexto. |
 
 ## Qué habilitar en Earthdata
 
 1. Inicia sesión en [Earthdata Login](https://urs.earthdata.nasa.gov/). Autoriza [NASA GES DISC](https://disc.gsfc.nasa.gov/datasets/GPM_3IMERGDF_07/summary) y [AppEEARS](https://appeears.earthdatacloud.nasa.gov/) al entrar por primera vez. Si vas a bajar gránulos SMAP directamente, autoriza también la aplicación de acceso de [NSIDC DAAC](https://nsidc.org/data/spl4smgp/versions/8). El menú **Applications → Authorized Apps** permite preautorizar las aplicaciones para descargas por terminal. [Guía oficial](https://urs.earthdata.nasa.gov/documentation/for_users/how_to_preauth_app)
-2. Descarga el recorte de IMERG Early de media hora para **−17.42442, −66.18272** y para los **tres días locales completos más recientes**. Guarda las exportaciones fuera del repositorio. El corte SMAP del **11 de noviembre de 2024 UTC** y el corte histórico de IMERG Final ya están integrados.
+2. En [Earthdata Search para IMERG Early](https://search.earthdata.nasa.gov/search/granules?p=C2723758340-GES_DISC), filtra los **tres días locales más recientes con cobertura completa**. Usa **Download All → Download all data → Done → Download Data** para obtener los archivos HDF5 originales con sus nombres. Guarda las exportaciones fuera del repositorio. El normalizador extrae la celda más cercana a **−17.42442, −66.18272**. El corte SMAP del **11 de noviembre de 2024 UTC** y el corte histórico de IMERG Final ya están integrados.
 3. Importa con los comandos de abajo y vuelve a compilar Docker. Para quien ya tenga acceso, compartir las exportaciones permite continuar con la importación. Las credenciales se gestionan en Earthdata o en el cliente local de descarga. [Instrucciones de descarga con cURL y Wget](https://urs.earthdata.nasa.gov/documentation/for_users/data_access/curl_and_wget)
 
 ## NASA POWER y SoilGrids
@@ -33,11 +33,7 @@ Fuentes y uso público. [NASA POWER Daily](https://power.larc.nasa.gov/docs/serv
 
 ## IMERG Final y Early
 
-El corte histórico se reproduce con la API pública NASA POWER. Pide `IMERG_PRECTOT` en UTC para el mismo periodo que la meteorología. El importador exige que el final del periodo tenga al menos 120 días de antigüedad para evitar incluir IMERG Late, que la API distribuye con el mismo parámetro para fechas recientes. La respuesta identifica la fuente como IMERG y la documentación de POWER identifica el tramo antiguo como Final. La respuesta no identifica la subversión de cada gránulo. [Metodología NASA POWER para IMERG](https://power.larc.nasa.gov/docs/methodology/data/sources_meteorology/#imerg-integrated-multi-satellite-retrievals-for-gpm)
-
-```sh
-python3 scripts/import-nasa.py imerg-final-power
-```
+El corte histórico incluido usa la variable `precipitation` de los 304 NetCDF diarios originales V07B. Para el punto de referencia de La Maica (−17.42442, −66.18272), se toma la celda de 0,1° centrada en **−17.45, −66.15**. La serie contiene un valor en mm/día por cada fecha UTC del **1 de noviembre de 2024 al 31 de agosto de 2025**, ambas inclusive. Se guarda en la clave `imerg` de `src/data/la-maica-sources.json`. [Producto diario de NASA GES DISC](https://disc.gsfc.nasa.gov/datasets/GPM_3IMERGDF_07/summary)
 
 Con una sesión [Earthdata Login](https://urs.earthdata.nasa.gov/) autorizada para NASA GES DISC, busca las colecciones `GPM_3IMERGDF` v07 para Final diario y `GPM_3IMERGHHE` v07 para Early de media hora. Para Final también se admite `GPM_3IMERGHH` de media hora. Descarga o solicita subconjuntos que contengan la celda alrededor de la referencia, conservando los nombres de granulo, la variable `precipitation` y las coordenadas `lat` y `lon`. El importador admite NetCDF4 y HDF5 georreferenciados y rechaza archivos con una versión o corrida distinta de la especificada. Los productos diarios son acumulaciones `mm/day` para días UTC; una tasa `mm/h` de media hora se multiplica por 0,5 antes de sumarla.
 
@@ -49,7 +45,11 @@ DATA_PY=/tmp/field-shift-data-env/bin/python
 "$DATA_PY" scripts/import-nasa.py imerg-final /tmp/field-shift-final.csv --units mm/day --version 07B --start 2024-11-01 --end 2025-08-31
 ```
 
-Ejemplo para Early de media hora V07C. Usa granulos de `04:00 UTC` del primer día hasta `03:30 UTC` del día siguiente al final. Esa ventana cubre medianoche a medianoche en Bolivia.
+El importador también admite una extracción alternativa de `IMERG_PRECTOT` en UTC con `python3 scripts/import-nasa.py imerg-final-power`. Ese comando reemplaza la serie incluida. Exige que el periodo termine al menos 120 días atrás para evitar IMERG Late y registra la consulta a la API pública. [Metodología NASA POWER para IMERG](https://power.larc.nasa.gov/docs/methodology/data/sources_meteorology/#imerg-integrated-multi-satellite-retrievals-for-gpm)
+
+El corte Early V07C incluido se descargó mediante Earthdata Download desde NASA GES DISC. El importador usa la variable `precipitation` de la celda centrada en **−17.45, −66.15** y guarda los totales de 24 horas en `src/data/imerg-early.json`. La revisión de los 144 HDF5 confirmó **0 mm** el 11, **18,51 mm** el 12 y **5,98 mm** el 13 de noviembre de 2026 en hora boliviana. [Gránulos del corte en Earthdata Search](https://search.earthdata.nasa.gov/search/granules?p=C2723758340-GES_DISC&qt=2026-11-11T04%3A00%3A00.000Z%2C2026-11-14T03%3A59%3A59.999Z)
+
+Para reproducir el corte, filtra del `2026-11-11 04:00 UTC` al `2026-11-14 03:59:59 UTC`. Los gránulos empiezan a las `04:00 UTC` del primer día y terminan con el intervalo que empieza a las `03:30 UTC` del día siguiente al final. Esa ventana cubre tres días completos en Bolivia. Early se publica con varias horas de retraso. En la comprobación del 15 de noviembre, el catálogo tenía 40 de los 48 intervalos del día 14 y Agua mostró ese día como estimación de Open-Meteo. [Frecuencia y latencia de IMERG](https://gpm.nasa.gov/data/imerg)
 
 ```sh
 "$DATA_PY" scripts/import-nasa.py normalize-imerg /ruta/early /tmp/field-shift-early.csv --run early --version 07C
