@@ -1,10 +1,31 @@
 name: field-shift
 
 services:
+  db:
+    image: postgres:18.6
+    environment:
+      POSTGRES_DB: fieldshift
+      POSTGRES_USER: fieldshift
+      POSTGRES_PASSWORD: ${FIELD_SHIFT_DB_PASSWORD:-fieldshift-local}
+    volumes:
+      - field-shift-db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fieldshift -d fieldshift"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
   app:
     build: .
     environment:
       GAMC_API_KEY: ${GAMC_API_KEY:-}
+      DATABASE_URL: postgres://fieldshift:${FIELD_SHIFT_DB_PASSWORD:-fieldshift-local}@db:5432/fieldshift
+      BETTER_AUTH_URL: http://localhost:${FIELD_SHIFT_PORT:-3000}
+      FIELD_SHIFT_DEMO_ENABLED: ${FIELD_SHIFT_DEMO_ENABLED:-true}
+      FIELD_SHIFT_DEMO_PASSWORD: ${FIELD_SHIFT_DEMO_PASSWORD:-prueba123}
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - "127.0.0.1:${FIELD_SHIFT_PORT:-3000}:3000"
     healthcheck:
@@ -13,3 +34,6 @@ services:
       timeout: 3s
       retries: 5
       start_period: 5s
+
+volumes:
+  field-shift-db:

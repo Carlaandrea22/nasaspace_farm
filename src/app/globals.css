@@ -53,7 +53,7 @@ body {
 }
 
 .project-link {
-  @apply inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl bg-[#f4f9e9] px-2.5 text-center text-sm font-bold text-[#253b1f] hover:bg-[#dff0bd] motion-safe:transition-colors sm:px-4;
+  @apply inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-xl bg-[#f4f9e9] px-2.5 text-center text-sm font-bold text-[#253b1f] hover:bg-[#dff0bd] motion-safe:transition-colors sm:px-4;
 }
 
 .app-frame {
@@ -238,18 +238,9 @@ h2 {
 
 .field-hero {
   @apply grid overflow-hidden rounded-[30px] text-[#f8fced];
-  grid-template-columns: 1.06fr 1fr;
+  grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.12fr);
   background: radial-gradient(ellipse at 25% 100%, #486132, #213720 75%);
   box-shadow: 0 18px 40px #263b2024;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .field-hero { animation: field-hero-arrive 400ms ease-out both; }
-}
-
-@keyframes field-hero-arrive {
-  from { opacity: 0; transform: translateY(7px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 
 .field-hero-copy {
@@ -262,28 +253,97 @@ h2 {
 }
 
 .field-hero h1 {
-  font-size: clamp(2.6rem, 5.8vw, 5.4rem);
+  font-size: clamp(2.6rem, 5.35vw, 5.1rem);
   line-height: 0.98;
   letter-spacing: -0.063em;
 }
 
-.field-hero-copy > p:last-child {
+.field-hero-description {
   @apply mt-4 max-w-[32ch] text-[#e4edd9];
 }
 
-.field-hero-photos {
-  @apply grid min-w-0 gap-[9px] py-[14px] pr-[14px];
-  grid-template-columns: 1fr 0.52fr;
+.field-carousel {
+  @apply my-3.5 mr-3.5 grid min-w-0 grid-rows-[1fr_auto] overflow-hidden rounded-[20px] border border-white/15 bg-[#1a2d1b];
 }
 
-.field-hero-photos > div {
-  border-radius: 19px;
-  background: url("/images/carla-valle.webp") 48% center / cover;
+.field-carousel-picture {
+  @apply relative isolate flex min-h-[290px] items-end overflow-hidden;
 }
 
-.field-hero-photos > div + div {
-  background-image: url("/images/carla-cultivos.jpg");
-  background-position: 72% center;
+.field-carousel-layer {
+  @apply absolute inset-0 -z-20 opacity-0;
+}
+
+.field-carousel-layer[data-active="true"] {
+  @apply z-[-19] opacity-100;
+}
+
+.field-carousel-layer img {
+  object-fit: cover;
+  object-position: center 54%;
+}
+
+.field-carousel-picture::after {
+  content: "";
+  @apply pointer-events-none absolute inset-0 -z-10;
+  background: linear-gradient(0deg, #102112f7 0%, #102112ae 21%, transparent 58%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .field-carousel-layer {
+    transition: opacity 360ms ease;
+  }
+  .field-carousel-layer[data-active="true"] img {
+    animation: field-scene-motion 7600ms ease-out both paused;
+  }
+  .field-carousel[data-playing="true"] .field-carousel-layer img {
+    animation-play-state: running;
+  }
+}
+
+@keyframes field-scene-motion {
+  from { transform: scale(1.004); }
+  to { transform: scale(1.115); }
+}
+
+.field-carousel-caption {
+  @apply flex w-full items-start gap-3 px-4 pt-10 pb-4 sm:px-5;
+}
+
+.field-carousel-icon {
+  @apply grid size-9 shrink-0 place-items-center rounded-xl bg-[#d9efad] text-[#293f23];
+}
+
+.field-carousel-title {
+  @apply text-lg leading-tight font-bold text-[#f8fced] sm:text-2xl;
+}
+
+.field-carousel-detail {
+  @apply mt-1 text-xs leading-snug text-[#e4edd9] sm:text-sm;
+}
+
+.field-carousel-controls {
+  @apply flex items-center gap-0.5 border-t border-white/15 px-1.5 py-0.5 sm:gap-1.5 sm:px-2.5;
+}
+
+.field-carousel-controls button {
+  @apply grid size-11 shrink-0 cursor-pointer place-items-center rounded-xl text-[#f8fced] hover:bg-white/10 focus-visible:outline-[#d9efad] focus-visible:outline-offset-[-3px];
+}
+
+.field-carousel-dots {
+  @apply flex min-w-0 flex-1 justify-center;
+}
+
+.field-carousel-dots button {
+  @apply h-11 w-full max-w-11 shrink;
+}
+
+.field-carousel-dots span {
+  @apply h-[5px] w-[7px] rounded-full bg-[#a3b394] motion-safe:transition-[width,background-color];
+}
+
+.field-carousel-dots [aria-current="true"] span {
+  @apply w-5 bg-[#d9efad];
 }
 
 .section-cover {
@@ -299,8 +359,39 @@ h2 {
 }
 
 .map-section-heading {
-  @apply mb-4 flex items-center gap-3 rounded-2xl p-4;
-  background: linear-gradient(90deg, #f1f6eb 45%, #e7f2ddda), url("/images/carla-cultivos.jpg") right 62% / cover;
+  @apply relative mb-4 flex items-center gap-3 overflow-hidden rounded-2xl bg-[#eff4e9] p-4;
+}
+
+@media (min-width: 48rem) {
+  .map-section-heading {
+    --tractor-width: clamp(13.5rem, 36%, 16rem);
+    min-height: 8.75rem;
+    padding-inline-end: calc(var(--tractor-width) + 1rem);
+  }
+
+  .map-section-heading > * {
+    @apply relative z-10;
+  }
+
+  .map-section-heading::before,
+  .map-section-heading::after {
+    content: "";
+    position: absolute;
+    inset: 0 0 0 auto;
+    pointer-events: none;
+  }
+
+  .map-section-heading::before {
+    width: min(60%, max(var(--tractor-width), calc(100% - 23rem)));
+    background: url("/images/parcela-paisaje.webp") right 44% / cover no-repeat;
+    mask-image: linear-gradient(90deg, transparent, #0003 24%, #000b 51%, #000 76%);
+  }
+
+  .map-section-heading::after {
+    width: var(--tractor-width);
+    background: url("/images/parcela-tractor.webp") right 53% / cover no-repeat;
+    mask-image: linear-gradient(90deg, transparent, #000 35%);
+  }
 }
 
 .map-section-heading h2 {
@@ -392,11 +483,82 @@ h2 {
   @apply bg-[#e7f0dc];
 }
 
-@media (max-width: 650px) {
-  .field-hero { @apply flex flex-col-reverse rounded-[22px]; }
-  .field-hero-copy { @apply self-stretch px-5 pt-[19px] pb-[22px]; }
-  .field-hero-photos { @apply h-[124px] gap-1.5 p-[9px] pb-0; }
-  .field-hero-photos > div { border-radius: 14px; }
+@media (max-width: 740px) {
+  .field-hero { @apply flex flex-col rounded-[22px]; }
+  .field-hero-copy { @apply self-stretch px-5 pt-6 pb-5; }
+  .field-carousel { @apply mx-2.5 mt-0 mb-2.5 rounded-2xl; }
+  .field-carousel-picture { min-height: clamp(190px, 58vw, 330px); }
   .field-hero h1 { font-size: clamp(2.25rem, 10vw, 3rem); }
   .field-hero h1 br { display: none; }
+}
+
+.account-dialog {
+  inset: 0;
+  margin: auto;
+  width: min(calc(100% - 2rem), 430px);
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  color: var(--color-ink);
+  background: #fcfdf9;
+  border: 1px solid #e0e8d6;
+  border-radius: 24px;
+  box-shadow: 0 28px 85px #101b15a6;
+}
+
+.account-anchor {
+  @apply relative z-30 min-w-0 shrink-0;
+}
+
+.account-anchor > button {
+  max-width: min(11rem, 50vw);
+}
+
+.account-initial {
+  @apply grid size-7 shrink-0 place-items-center rounded-full bg-[#d9efad] text-sm font-bold text-[#294227];
+}
+
+.account-menu {
+  @apply absolute top-full right-0 mt-2.5 rounded-2xl border border-line bg-surface p-2.5 text-ink;
+  width: min(16rem, calc(100vw - 2rem));
+  box-shadow: 0 16px 38px #192d1b40;
+}
+
+.account-menu-identity {
+  @apply mb-2 flex items-center gap-2.5 border-b border-line px-2 pt-1 pb-2.5;
+}
+
+.account-menu-identity .account-initial {
+  @apply size-9;
+}
+
+.account-sign-out {
+  @apply w-full justify-start gap-2.5 border-transparent px-2.5 hover:border-transparent hover:bg-leaf/60;
+}
+
+.account-dialog::backdrop {
+  background: #14281c99;
+  backdrop-filter: blur(7px);
+}
+
+.account-dialog-content {
+  position: relative;
+  padding: clamp(1.125rem, 5vw, 1.75rem);
+}
+
+.account-mark {
+  @apply grid size-12 place-items-center rounded-[15px] bg-[#d9efad] text-[#294227];
+}
+
+.account-close {
+  @apply absolute top-3 right-3 grid size-11 cursor-pointer place-items-center rounded-xl text-muted hover:bg-leaf/65;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .account-dialog[open] { animation: account-appear 160ms ease-out; }
+  .account-menu:not([hidden]) { animation: account-appear 130ms ease-out; }
+}
+
+@keyframes account-appear {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }

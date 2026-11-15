@@ -99,7 +99,7 @@ export default function ParcelMap({ selected, onSelect, onView, overview }: MapP
     L.control.scale({ imperial: false }).addTo(map);
     map.attributionControl.setPrefix(false);
     marker.current = L.circleMarker(initial ? point(initial) : city, {
-      radius: 8, color: "#ffffff", weight: 3, fillColor: "#173c30",
+      radius: 10, color: "#ffffff", weight: 3, fillColor: "#315a25",
       fillOpacity: initial ? 1 : 0, opacity: initial ? 1 : 0,
       interactive: false, pane: "parcel-point",
     }).addTo(map);

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addDays, compare, et0, flowVolume, millimeters, moveTurn, rootCapacity } from "../src/domain/water-balance/model.ts";
+import { addDays, compare, et0, flowVolume, historicalRain, initialSoilWater, millimeters, moveTurn, rootCapacity } from "../src/domain/water-balance/model.ts";
 
 test("converts irrigation and integrates the explored soil horizon", () => {
   assert.equal(millimeters(100, 2), 5);
@@ -23,6 +23,24 @@ test("Penman–Monteith gives a plausible daily ET0 and handles invalid inputs",
 });
 
 const soil = [{top:0,bottom:100,fc:.3,wp:.15}];
+
+test("SMAP uses reviewed root-zone moisture from the previous UTC day", () => {
+  const sample = { date: "2024-12-31", surface: 0.27, root: 0.225, quality: "accepted" };
+  assert.equal(initialSoilWater(soil, [sample], "2025-01-01", .72).fraction, 0.5);
+  assert.equal(initialSoilWater(soil, [{ ...sample, quality: "suspect" }], "2025-01-01", .72).fraction, .72);
+  assert.equal(initialSoilWater(soil, [sample], "2025-01-02", .72).fraction, .72);
+  assert.equal(initialSoilWater(soil, [{ ...sample, root: 0.32 }], "2025-01-01", .72).fraction, 1);
+});
+
+test("IMERG Final takes precedence on valid days and falls back without inventing rain", () => {
+  const rain = historicalRain("2025-01-01", "2025-01-03", { "2025-01-01": 0, "2025-01-02": null }, {
+    "2025-01-01": { rain: 8 }, "2025-01-02": { rain: 4 },
+  });
+  assert.deepEqual(rain.map(({ rain, reference, source }) => [rain, reference, source]), [
+    [0, 8, "IMERG Final"], [4, 4, "POWER"], [null, null, "Sin dato"],
+  ]);
+});
+
 const crop = {name:"Cultivo", kc:[1,1,1], rootM:.4, p:.5, minDays:1, maxDays:100, seedMonths:[1], use:"forage"};
 const season = {start:"2025-01-01",end:"2025-01-07",crop};
 const input = {

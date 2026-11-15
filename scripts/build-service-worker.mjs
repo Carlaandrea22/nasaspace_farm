@@ -15,9 +15,15 @@ const browserAssets = [
   "/images/valle-cochabamba.jpg",
   "/images/carla-valle.webp",
   "/images/carla-cultivos.jpg",
+  "/images/parcela-paisaje.webp",
+  "/images/parcela-tractor.webp",
   "/maps/cochabamba-distritos.geojson",
   "/pilots/la-maica/contexto-osm.geojson",
   "/pilots/tunari/contexto-osm.geojson",
+  ...(await readdir("public/images/field-scenes"))
+    .filter((name) => name.endsWith(".webp"))
+    .sort()
+    .map((name) => `/images/field-scenes/${name}`),
 ];
 
 const source = await readFile("src/lib/browser/service-worker.js", "utf8");

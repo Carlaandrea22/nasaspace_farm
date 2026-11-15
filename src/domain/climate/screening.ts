@@ -14,6 +14,7 @@ export type CropProfile = {
   species: string;
   use: CropUse;
   days: number;
+  cycleRange: number[];
   temperature: number[];
   rainfall: number[];
   optimalPh: number[];
@@ -27,10 +28,12 @@ export type TemperatureAssessment = {
   outside: number;
 };
 
-export type CropScreen = Pick<CropProfile, "code" | "name" | "species" | "use" | "days" | "optimalPh"> & {
+export type CropScreen = Pick<CropProfile, "code" | "name" | "species" | "use" | "days" | "cycleRange" | "temperature" | "optimalPh"> & {
   assessment: TemperatureAssessment | null;
   optimalRain: boolean | null;
   samples: number;
+  favorableCycles: number;
+  conditionalCycles: number;
 };
 
 export type ClimateProfile = {
@@ -81,8 +84,11 @@ export function rankCrops(crops: CropScreen[], use: CropUse | "", ph: number | n
   function order(a: typeof candidates[number], b: typeof a) {
     return Number(b.eligible) - Number(a.eligible) ||
       (a.assessment ? categoryOrder[a.assessment.category] : 3) - (b.assessment ? categoryOrder[b.assessment.category] : 3) ||
-      (a.assessment?.outside ?? Infinity) - (b.assessment?.outside ?? Infinity) ||
-      (b.assessment?.optimal ?? 0) - (a.assessment?.optimal ?? 0) ||
+      (b.samples ? b.favorableCycles / b.samples : 0) - (a.samples ? a.favorableCycles / a.samples : 0) ||
+      (a.assessment ? a.assessment.outside / a.assessment.observations : 1) -
+        (b.assessment ? b.assessment.outside / b.assessment.observations : 1) ||
+      (b.assessment ? b.assessment.optimal / b.assessment.observations : 0) -
+        (a.assessment ? a.assessment.optimal / a.assessment.observations : 0) ||
       Number(a.phMatch === false) - Number(b.phMatch === false);
   }
   return candidates.sort(order);
@@ -117,8 +123,6 @@ export function summarizeClimate(days: ClimateDay[], profiles: CropProfile[]) {
     }
     const temperature = annualSamples("temperature");
     return {
-      temperatures: temperature.flat(),
-      samples: temperature.length,
       summary: {
         month: month + 1,
         temperature: adequate(temperature.flat()),
@@ -130,17 +134,39 @@ export function summarizeClimate(days: ClimateDay[], profiles: CropProfile[]) {
     };
   });
 
-  const crops = monthly.map(({ temperatures, samples }) => profiles.map((profile): CropScreen => ({
-    code: profile.code,
-    name: profile.name,
-    species: profile.species,
-    use: profile.use,
-    days: profile.days,
-    optimalPh: profile.optimalPh,
-    assessment: samples >= 3 ? assessTemperature(temperatures, profile.temperature) : null,
-    optimalRain: annualRain === null ? null : annualRain >= profile.rainfall[1] && annualRain <= profile.rainfall[2],
-    samples,
-  })));
+  const temperatureByDate = new Map(days.map((day) => [day.date, day.temperature]));
+  const crops = monthly.map((_, month) => profiles.map((profile): CropScreen => {
+    const cycles = [];
+    for (const year of years.keys()) {
+      const start = Date.UTC(year, month, 1);
+      const temperatures = [];
+      for (let day = 0; day < profile.days; day++) {
+        const date = new Date(start + day * dayMs).toISOString().slice(0, 10);
+        const value = temperatureByDate.get(date);
+        if (value == null) break;
+        temperatures.push(value);
+      }
+      if (temperatures.length !== profile.days) continue;
+      const cycle = assessTemperature(temperatures, profile.temperature);
+      if (cycle) cycles.push(cycle);
+    }
+    const samples = cycles.length;
+    const favorableCycles = cycles.filter(({ category }) => category === "recommended").length;
+    const conditionalCycles = cycles.filter(({ category }) => category === "conditional").length;
+    const category = favorableCycles > samples / 2 ? "recommended"
+      : favorableCycles + conditionalCycles > samples / 2 ? "conditional" : "unsuitable";
+    return {
+      code: profile.code, name: profile.name, species: profile.species, use: profile.use,
+      days: profile.days, cycleRange: profile.cycleRange, temperature: profile.temperature,
+      optimalPh: profile.optimalPh, samples, favorableCycles, conditionalCycles,
+      assessment: samples < 3 ? null : {
+        category, observations: samples * profile.days,
+        optimal: sum(cycles.map((cycle) => cycle.optimal)),
+        outside: sum(cycles.map((cycle) => cycle.outside)),
+      },
+      optimalRain: annualRain === null ? null : annualRain >= profile.rainfall[1] && annualRain <= profile.rainfall[2],
+    };
+  }));
 
   return { annualRain, rainYears: annualTotals.length, months: monthly.map(({ summary }) => summary), crops };
 }

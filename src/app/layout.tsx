@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
-import { ArrowRight, Sprout } from "lucide-react";
+import { Sprout } from "lucide-react";
+import { AccountDialog } from "../components/account-dialog";
 import { AppNavigation } from "../components/app-navigation";
 import { ServiceWorkerRegistration } from "../lib/browser/service-worker-registration";
 import "@fontsource-variable/dm-sans/wght.css";
@@ -29,7 +30,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <span className="brand-mark"><Sprout size={24} aria-hidden="true" /></span>
               <span><strong>Agua y Siembra</strong><small>Cochabamba</small></span>
             </a>
-            <a className="project-link" href="/la-maica">Piloto La Maica <ArrowRight size={16} className="hidden sm:block" aria-hidden="true" /></a>
+            <AccountDialog />
           </div>
         </header>
         <div className="app-frame">

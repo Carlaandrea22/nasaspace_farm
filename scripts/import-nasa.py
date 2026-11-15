@@ -9,6 +9,7 @@ import json
 from math import asin, cos, isfinite, radians, sin, sqrt
 from pathlib import Path
 import re
+from statistics import fmean
 from urllib.parse import urlencode
 from urllib.request import urlopen
 from zoneinfo import ZoneInfo
@@ -66,9 +67,9 @@ def valid_number(raw, minimum, maximum=float("inf")):
     return value if isfinite(value) and minimum <= value <= maximum else None
 
 
-def prepare_power(start, end, raw_path):
+def prepare_power(start, end, raw_path, *, fields=POWER_FIELDS, source=None):
     params = {
-        "parameters": ",".join(name for name, _ in POWER_FIELDS.values()),
+        "parameters": ",".join(name for name, _ in fields.values()),
         "community": "AG", "longitude": POINT[0], "latitude": POINT[1],
         "start": start.strftime("%Y%m%d"), "end": end.strftime("%Y%m%d"),
         "format": "JSON", "time-standard": "UTC",
@@ -77,7 +78,9 @@ def prepare_power(start, end, raw_path):
     raw = read_json(raw_path) if raw_path else json.loads(fetch(url))
     if raw["header"]["time_standard"] != "UTC":
         raise ValueError("NASA POWER debe estar etiquetado UTC")
-    if any(raw["parameters"][name]["units"] != unit for name, unit in POWER_FIELDS.values()):
+    if source and source not in raw["header"].get("sources", []):
+        raise ValueError(f"NASA POWER no identifica {source} como fuente")
+    if any(raw["parameters"][name]["units"] != unit for name, unit in fields.values()):
         raise ValueError("Las unidades de NASA POWER cambiaron")
     location = raw["geometry"]["coordinates"]
     # POWER rounds response longitude and latitude to three decimal places.
@@ -96,9 +99,19 @@ def prepare_power(start, end, raw_path):
         return None if raw_value == fill_value else valid_number(raw_value, minimum, maximum)
 
     return {
-        day.isoformat(): {key: value(name, day) for key, (name, _) in POWER_FIELDS.items()}
+        day.isoformat(): {key: value(name, day) for key, (name, _) in fields.items()}
         for day in dates
     }, url, location[2]
+
+
+def prepare_imerg_final_power(start, end):
+    # POWER serves Late Run in recent months through the same parameter.
+    if end > datetime.now(timezone.utc).date() - timedelta(days=120):
+        raise ValueError("El periodo debe terminar al menos 120 días atrás para evitar IMERG Late")
+    daily, url, _ = prepare_power(
+        start, end, None, fields={"rain": ("IMERG_PRECTOT", "mm/day")}, source="IMERG",
+    )
+    return {day: entry["rain"] for day, entry in daily.items()}, url
 
 
 def soil_profile(tiff_dir):
@@ -209,8 +222,10 @@ def import_smap(path):
 
 
 def normalize_appeears(source, destination):
-    """Normalize one AppEEARS point sample. Quality stays suspect pending field review."""
+    """Normalize a point to UTC daily means, preserving gaps and the review step."""
     suffixes = ("_Geophysical_Data_sm_surface", "_Geophysical_Data_sm_rootzone")
+    expected_times = {time(hour, 30) for hour in range(1, 24, 3)}
+    observations = {}
     with source.open(encoding="utf-8-sig", newline="") as sample:
         reader = csv.DictReader(sample)
         columns = []
@@ -219,16 +234,36 @@ def normalize_appeears(source, destination):
             if len(names) != 1:
                 raise ValueError(f"Se esperaba una columna AppEEARS {suffix}")
             columns.append(names[0])
-        rows = []
         for row in reader:
             latitude = valid_number(row["Latitude"], -90, 90)
             longitude = valid_number(row["Longitude"], -180, 180)
             if latitude is None or longitude is None or abs(latitude - POINT[1]) > 0.001 or abs(longitude - POINT[0]) > 0.001:
                 raise ValueError("El punto del archivo AppEEARS debe corresponder a la referencia de La Maica")
-            day = date.fromisoformat(row["Date"][:10]).isoformat()
+            timestamp = row["Date"].strip()
+            if len(timestamp) == 10:
+                day = date.fromisoformat(timestamp)
+                slot = None
+            else:
+                stamp = datetime.fromisoformat(timestamp.replace(" UTC", "+00:00"))
+                day, slot = stamp.date(), stamp.time()
+                if stamp.utcoffset() != timedelta(0) or slot not in expected_times:
+                    raise ValueError(f"Fecha SMAP fuera de la rejilla de 3 h UTC: {timestamp}")
             surface, root = (valid_number(row[key], 0, 1) for key in columns)
-            quality = "missing" if surface is None or root is None else "suspect"
-            rows.append((day, surface, root, quality))
+            samples = observations.setdefault(day, {})
+            if slot in samples or (samples and ((None in samples) != (slot is None))):
+                raise ValueError(f"Muestras AppEEARS duplicadas o de frecuencia mixta para {day}")
+            samples[slot] = surface, root
+
+    rows = []
+    for day, samples in sorted(observations.items()):
+        if None in samples:
+            surface, root = samples[None]
+        elif samples.keys() == expected_times and all(None not in pair for pair in samples.values()):
+            surface, root = (round(fmean(values), 8) for values in zip(*samples.values()))
+        else:
+            surface, root = None, None
+        quality = "missing" if surface is None or root is None else "suspect"
+        rows.append((day.isoformat(), surface, root, quality))
     with destination.open("w", encoding="utf-8", newline="") as output:
         writer = csv.writer(output)
         writer.writerow(("date", "surface", "root", "quality"))
@@ -276,6 +311,7 @@ def main():
     commands = parser.add_subparsers(dest="command", required=True)
     power = commands.add_parser("power")
     power.add_argument("--raw", type=Path)
+    commands.add_parser("imerg-final-power", help="Importa IMERG Final por NASA POWER para el periodo histórico")
     soil = commands.add_parser("soil")
     soil.add_argument("--tiff-dir", type=Path)
     for name in ("imerg-final", "imerg-early"):
@@ -312,7 +348,10 @@ def main():
         return
     if args.command == "imerg-early":
         data = read_json(RECENT)
-        data["days"] = import_imerg(args.csv, args.start, args.end, LOCAL_TIME, args.units)
+        days = import_imerg(args.csv, args.start, args.end, LOCAL_TIME, args.units)
+        if all(value is None for value in days.values()):
+            parser.error("IMERG Early no contiene ningún día completo en hora boliviana. Se conserva el corte anterior.")
+        data["days"] = days
         data["version"] = args.version
         write_json(RECENT, data)
         return
@@ -324,15 +363,22 @@ def main():
         data["meta"]["period"] = dict(start=args.start.isoformat(), end=args.end.isoformat(), timeStandard="UTC")
     elif args.command == "soil":
         data["soil"], data["meta"]["soilPoint"] = soil_profile(args.tiff_dir)
-    elif args.command == "imerg-final":
+    elif args.command in ("imerg-final", "imerg-final-power"):
         period = data["meta"]["period"]
-        if args.start.isoformat() != period["start"] or args.end.isoformat() != period["end"]:
-            parser.error("IMERG Final debe cubrir el mismo periodo que NASA POWER")
-        if args.units == "mm/day":
-            data["imerg"] = import_imerg_daily(args.csv, args.start, args.end)
+        if args.command == "imerg-final-power":
+            days, url = prepare_imerg_final_power(date.fromisoformat(period["start"]), date.fromisoformat(period["end"]))
+            data["meta"]["imergPowerSource"] = url
+            data["meta"].pop("imergVersion", None)
         else:
-            data["imerg"] = import_imerg(args.csv, args.start, args.end, timezone.utc, args.units)
-        data["meta"]["imergVersion"] = args.version
+            if args.start.isoformat() != period["start"] or args.end.isoformat() != period["end"]:
+                parser.error("IMERG Final debe cubrir el mismo periodo que NASA POWER")
+            days = (import_imerg_daily(args.csv, args.start, args.end) if args.units == "mm/day"
+                    else import_imerg(args.csv, args.start, args.end, timezone.utc, args.units))
+            data["meta"]["imergVersion"] = args.version
+            data["meta"].pop("imergPowerSource", None)
+        if all(value is None for value in days.values()):
+            parser.error("IMERG Final no contiene ningún día completo en UTC. Se conserva el corte anterior.")
+        data["imerg"] = days
     elif args.command == "smap":
         data["smap"] = import_smap(args.csv)
     data["meta"]["fetchedAt"] = datetime.now(LOCAL_TIME).date().isoformat()

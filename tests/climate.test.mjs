@@ -5,9 +5,9 @@ import { assessTemperature, rankCrops, summarizeClimate } from "../src/domain/cl
 import { heatSignals } from "../src/features/operations/model.ts";
 
 const dayMs = 86_400_000;
-const profile = { code: "1232", name: "Cebada", species: "Hordeum vulgare", use: "forraje", days: 90, temperature: [2, 15, 20, 40], rainfall: [200, 500, 1000, 2000], optimalPh: [6.5, 7.5] };
+const profile = { code: "1232", name: "Cebada", species: "Hordeum vulgare", use: "forraje", days: 90, cycleRange: [80, 100], temperature: [2, 15, 20, 40], rainfall: [200, 500, 1000, 2000], optimalPh: [6.5, 7.5] };
 
-test("EcoCrop usa las ocurrencias completas del mes y distingue lluvia ausente", () => {
+test("EcoCrop evalúa ciclos completos y distingue lluvia ausente", () => {
   const start = Date.UTC(2020, 0, 1);
   const days = Array.from({ length: 1827 }, (_, index) => {
     const date = new Date(start + index * dayMs).toISOString().slice(0, 10);
@@ -16,6 +16,8 @@ test("EcoCrop usa las ocurrencias completas del mes y distingue lluvia ausente",
   });
   const good = summarizeClimate(days, [profile]);
   assert.equal(good.crops[0][0].assessment.category, "recommended");
+  assert.equal(good.crops[0][0].assessment.observations, 450);
+  assert.equal(good.crops[11][0].samples, 4);
   assert.equal(good.crops[7][0].assessment.category, "unsuitable");
   assert.equal(good.rainYears, 5);
   assert.equal(good.crops[0][0].optimalRain, true);
@@ -24,6 +26,8 @@ test("EcoCrop usa las ocurrencias completas del mes y distingue lluvia ausente",
   assert.equal(missing.crops[0][0].optimalRain, null);
   assert.equal(missing.crops[0][0].assessment.category, "recommended");
   assert.equal(missing.months[0].rain, null);
+  const gap = summarizeClimate(days.map((day) => day.date === "2020-02-01" ? { ...day, temperature: null } : day), [profile]);
+  assert.equal(gap.crops[0][0].samples, 4);
 });
 
 test("la regla de Zama distingue extremos térmicos y ordena por destino y pH", () => {

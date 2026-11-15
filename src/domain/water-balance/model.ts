@@ -23,6 +23,7 @@ export type BalanceInput = {
   rainEfficiency: number;
   irrigationEfficiency: number;
   initialFraction: number;
+  expansionFraction?: number;
   priority: string;
   rotations: Rotation[];
 };
@@ -39,18 +40,65 @@ export function moveTurn(turns: Turn[], id: string, delay: number): Turn[] {
   return turns.map((turn) => turn.id === id ? { ...turn, date: addDays(turn.date, delay) } : turn);
 }
 
-export function rootCapacity(layers: SoilLayer[], depthM: number): number | null {
+function rootStorageLimits(layers: SoilLayer[], depthM: number) {
   const depth = depthM * 100;
-  let capacity = 0;
+  let fieldCapacity = 0;
+  let wiltingPoint = 0;
   let bottom = 0;
   for (const layer of layers) {
     if (bottom >= depth) break;
     if (layer.top !== bottom || layer.bottom <= bottom || ![layer.fc, layer.wp].every(Number.isFinite) || layer.fc > 1 || layer.wp < 0 || layer.fc <= layer.wp) return null;
     const end = Math.min(depth, layer.bottom);
-    capacity += (layer.fc - layer.wp) * (end - bottom) * 10;
+    const thickness = (end - bottom) * 10;
+    fieldCapacity += layer.fc * thickness;
+    wiltingPoint += layer.wp * thickness;
     bottom = end;
   }
-  return bottom >= depth && capacity > 0 ? capacity : null;
+  return bottom >= depth && fieldCapacity > wiltingPoint ? { fieldCapacity, wiltingPoint } : null;
+}
+
+export function rootCapacity(layers: SoilLayer[], depthM: number): number | null {
+  const limits = rootStorageLimits(layers, depthM);
+  return limits ? limits.fieldCapacity - limits.wiltingPoint : null;
+}
+
+export function availableWaterFraction(layers: SoilLayer[], depthM: number, volumetricMoisture: number) {
+  if (!Number.isFinite(volumetricMoisture) || volumetricMoisture < 0 || volumetricMoisture > 1) return null;
+  const limits = rootStorageLimits(layers, depthM);
+  if (!limits) return null;
+  const storageMm = volumetricMoisture * depthM * 1000;
+  return clamp((storageMm - limits.wiltingPoint) / (limits.fieldCapacity - limits.wiltingPoint), 0, 1);
+}
+
+export type SmapObservation = { date: string; surface: number | null; root: number | null; quality: string };
+
+export function initialSoilWater(
+  layers: SoilLayer[], observations: SmapObservation[], start: string, assumed: number,
+) {
+  const date = addDays(start, -1);
+  const sample = observations.find((row) => row.date === date);
+  const validSurface = sample?.surface != null && sample.surface >= 0 && sample.surface <= 1;
+  const estimate = sample?.quality === "accepted" && validSurface && sample.root !== null
+    ? availableWaterFraction(layers, 1, sample.root) : null;
+  return { date, sample, estimate, fraction: estimate ?? assumed };
+}
+
+function validRain(value: number | null | undefined): number | null {
+  return value != null && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+export function historicalRain(
+  start: string, end: string, imerg: Record<string, number | null>,
+  power: Record<string, { rain: number | null }>,
+) {
+  const length = dayDistance(start, end) + 1;
+  return Array.from({ length }, (_, index) => {
+    const date = addDays(start, index);
+    const final = validRain(imerg[date]);
+    const reference = validRain(power[date]?.rain);
+    const source = final !== null ? "IMERG Final" : reference !== null ? "POWER" : "Sin dato";
+    return { date, rain: final ?? reference, reference, source };
+  });
 }
 
 // FAO-56 daily Penman–Monteith, using actual vapour pressure estimated from RHmean.
@@ -154,6 +202,7 @@ function evaluateRotation(input: BalanceInput, rotation: Rotation, irrigation: M
 
   let stored = capacity[0]! * input.initialFraction;
   let supplementalStorage = stored;
+  const expansionFraction = input.expansionFraction ?? input.initialFraction;
   let previousCapacity = capacity[0]!;
   let supplementalMm = 0;
   let coverageDays = 0;
@@ -168,8 +217,7 @@ function evaluateRotation(input: BalanceInput, rotation: Rotation, irrigation: M
     const season = seasons[index];
     const max = capacity[index] ?? previousCapacity;
     if (max !== previousCapacity) {
-      // The same initial moisture fraction is assumed for newly explored soil.
-      const resize = (amount: number) => max > previousCapacity ? amount + (max - previousCapacity) * input.initialFraction : amount * max / previousCapacity;
+      const resize = (amount: number) => max > previousCapacity ? amount + (max - previousCapacity) * expansionFraction : amount * max / previousCapacity;
       stored = resize(stored);
       supplementalStorage = resize(supplementalStorage);
       previousCapacity = max;

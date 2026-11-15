@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { MapPin } from "lucide-react";
+import { ArrowRight, MapPin } from "lucide-react";
 import { useRef, useState, type SubmitEvent } from "react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -16,6 +16,10 @@ const ParcelMap = dynamic(() => import("./parcel-map"), {
   ssr: false,
   loading: () => <p role="status" className="parcel-viewport grid place-items-center rounded-2xl text-muted">Abriendo el mapa…</p>,
 });
+
+function pointKey(point: Coordinates) {
+  return `${point.latitude},${point.longitude}`;
+}
 
 export function ParcelForm({ explore = false }: { explore?: boolean }) {
   return (
@@ -37,13 +41,16 @@ function ParcelFields({ parcel, explore, save, status, markEdited }: { parcel?: 
   const [error, setError] = useState("");
   const [mapOpen, setMapOpen] = useState(explore || !parcel);
   const [view, setView] = useState("");
+  const [confirmedKey, setConfirmedKey] = useState(() => parcel ? pointKey(parcel) : null);
   const [consulting, setConsulting] = useState(false);
   const [lookupError, setLookupError] = useState("");
   const [lookup, setLookup] = useState<{ point: Coordinates; result: Territory } | undefined>(
     parcel?.territory ? { point: parcel, result: parcel.territory } : undefined,
   );
   const activeLookup = useRef(0);
+  const resultsRef = useRef<HTMLElement>(null);
   const selected = coordinates(latitude, longitude);
+  const confirmed = selected !== null && pointKey(selected) === confirmedKey;
   const reference = selected ? getReferenceCase(selected.latitude, selected.longitude) : null;
   const currentResult = lookup && selected?.latitude === lookup.point.latitude && selected.longitude === lookup.point.longitude ? lookup.result : undefined;
 
@@ -51,6 +58,7 @@ function ParcelFields({ parcel, explore, save, status, markEdited }: { parcel?: 
     activeLookup.current += 1;
     setConsulting(false);
     setLookupError("");
+    setConfirmedKey(null);
   }
 
   function selectPoint(point: Coordinates) {
@@ -75,16 +83,28 @@ function ParcelFields({ parcel, explore, save, status, markEdited }: { parcel?: 
       const result = await response.json() as Territory;
       if (activeLookup.current !== attempt) return;
       if (Object.values({ district: result.district, periurban: result.periurban, drainage: result.drainage }).every((layer) => layer.status === "unavailable")) {
-        setLookupError("No se pudo consultar el GAMC. Si ya guardaste una consulta, puedes seguir leyendo sus datos.");
+        setLookupError("Las capas municipales no respondieron. Puedes seguir con el análisis climático.");
       } else {
         setLookup({ point: selected, result });
         markEdited();
       }
     } catch {
-      if (activeLookup.current === attempt) setLookupError("No se pudo consultar el GAMC. Revisa la conexión e inténtalo de nuevo.");
+      if (activeLookup.current === attempt) setLookupError("No se pudieron consultar las capas municipales. Revisa la conexión y vuelve a intentar.");
     } finally {
       if (activeLookup.current === attempt) setConsulting(false);
     }
+  }
+
+  function showResults() {
+    if (!selected) return;
+    if (!confirmed) {
+      setConfirmedKey(pointKey(selected));
+      void consult();
+    }
+    requestAnimationFrame(() => {
+      resultsRef.current?.focus({ preventScroll: true });
+      resultsRef.current?.scrollIntoView({ block: "start" });
+    });
   }
 
   function submit(event: SubmitEvent<HTMLFormElement>) {
@@ -98,6 +118,21 @@ function ParcelFields({ parcel, explore, save, status, markEdited }: { parcel?: 
     setError("");
     void save({ ...point, name: String(values.get("name") ?? "").trim(), areaHa, ...(currentResult ? { territory: currentResult } : {}) });
   }
+
+  const results = confirmed && selected && (
+    <section ref={resultsRef} tabIndex={-1} className="grid min-w-0 scroll-mt-6 gap-4" aria-labelledby="parcel-results-title">
+      <h2 id="parcel-results-title" className="text-xl font-bold">Resultados de la parcela</h2>
+      <ParcelClimate point={selected} />
+      <TerritorySummary reference={reference} result={currentResult}>
+        {consulting ? <p role="status" className="text-sm text-muted">Consultando las capas municipales…</p> : (
+          <Button type="button" variant="secondary" className="justify-self-start" disabled={status === "saving"} onClick={() => void consult()}>
+            {currentResult ? "Actualizar datos municipales" : "Verificar distrito y drenaje"}
+          </Button>
+        )}
+        {lookupError && <p role="status" className="text-sm text-muted">{lookupError}</p>}
+      </TerritorySummary>
+    </section>
+  );
 
   return (
     <div className="grid gap-6">
@@ -120,19 +155,24 @@ function ParcelFields({ parcel, explore, save, status, markEdited }: { parcel?: 
           <div id="parcel-map" hidden={!mapOpen}>
             {mapOpen && <ParcelMap overview={explore} selected={selected} onSelect={selectPoint} onView={setView} />}
           </div>
-          {explore && <div className="map-selected">
-            <span className="map-emblem"><MapPin size={22} aria-hidden="true" /></span>
-            <span role="status">{selected ? `${selected.latitude.toFixed(5)}, ${selected.longitude.toFixed(5)}` : "Selecciona un punto del mapa"}</span>
-            {selected && <Button asChild variant="secondary" className="sm:ml-auto"><a href="#clima-parcela">Ver clima y cultivos</a></Button>}
-          </div>}
           {!mapOpen && <p className="text-sm text-muted">Puedes consultar o editar las coordenadas sin abrir el mapa.</p>}
+          <div className="map-selected">
+            <span className="map-emblem"><MapPin size={22} aria-hidden="true" /></span>
+            <div className="min-w-0" role="status">
+              <p>{selected ? (confirmed ? "Punto confirmado" : "Punto seleccionado") : "Selecciona un punto del mapa"}</p>
+              {selected && <p className="text-sm font-normal text-muted">{selected.latitude.toFixed(5)}, {selected.longitude.toFixed(5)}</p>}
+            </div>
+            {selected && <Button type="button" className="w-full sm:ml-auto sm:w-auto" disabled={status === "saving"} onClick={showResults}>
+              {confirmed ? "Ver resultados" : "Consultar esta parcela"} <ArrowRight size={17} aria-hidden="true" />
+            </Button>}
+          </div>
           <div className="mt-3 flex flex-wrap items-center gap-2" aria-label="Casos de referencia" role="group">
             {Object.entries(referenceCases).map(([key, option]) => (
               <Button key={key} type="button" variant="secondary" aria-pressed={reference === key} className="aria-pressed:border-action aria-pressed:bg-leaf" onClick={() => selectPoint(option)}>{option.label}</Button>
             ))}
-            {!explore && selected && <Button asChild variant="secondary"><a href="#clima-parcela">Ver clima y cultivos</a></Button>}
           </div>
         </section>
+        {explore && results}
         <section aria-labelledby="parcel-fields" className="panel">
           <h2 id="parcel-fields" className="text-xl font-bold">Datos de la parcela</h2>
           <p className="mt-1 text-sm text-muted">Marca un punto o escribe las coordenadas. Tu borrador se guarda sin cuenta.</p>
@@ -150,12 +190,7 @@ function ParcelFields({ parcel, explore, save, status, markEdited }: { parcel?: 
           </form>
         </section>
       </div>
-      {selected && <ParcelClimate point={selected} />}
-      <TerritorySummary reference={reference} result={currentResult} />
-      <div className="grid justify-items-start gap-2">
-        <Button type="button" variant="secondary" disabled={!selected || consulting || status === "saving"} onClick={() => void consult()}>{consulting ? "Consultando…" : "Consultar GAMC"}</Button>
-        {lookupError && <p role="status" className="text-sm text-muted">{lookupError}</p>}
-      </div>
+      {!explore && results}
     </div>
   );
 }
