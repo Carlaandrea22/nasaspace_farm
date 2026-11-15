@@ -1,5 +1,5 @@
 import sourceJson from "../../data/la-maica-sources.json";
-import { addDays, dayDistance, et0, flowVolume, millimeters, type BalanceInput, type Crop, type SoilLayer, type Turn, type Weather } from "../../domain/water-balance/model";
+import { addDays, dayDistance, et0, flowVolume, historicalRain, initialSoilWater, millimeters, type BalanceInput, type Crop, type SmapObservation, type SoilLayer, type Turn, type Weather } from "../../domain/water-balance/model";
 import { cropForParcel, productionPriorities, type CropWater, type PilotDraft, type ProductionPriority } from "../pilot/draft";
 import { getReferenceCase } from "../territory/reference";
 
@@ -7,8 +7,8 @@ const sources = sourceJson as {
   power: Record<string, Weather & { rain: number | null }>;
   imerg: Record<string, number | null>;
   soil: SoilLayer[];
-  smap: { date: string; surface: number | null; root: number | null; quality: string }[];
-  meta: typeof sourceJson.meta;
+  smap: SmapObservation[];
+  meta: typeof sourceJson.meta & { imergVersion?: string; imergPowerSource?: string };
 };
 
 const maize = "Maíz forrajero";
@@ -36,19 +36,21 @@ export const scenarioSources = {
 
 type Scenario = {
   input: BalanceInput;
+  referenceInput: BalanceInput | null;
   volume: number;
   area: number;
   volumeSource: string;
   history: boolean;
-  usingImerg: boolean;
+  rain: ReturnType<typeof historicalRain>;
+  soilWater: ReturnType<typeof initialSoilWater>;
 };
 
 export const demoVolume = 400;
 export const demoInterval = 17;
+export const assumedSoilWater = 0.72;
 const defaultDates = { firstPlanting: "2024-11-12", firstHarvest: "2025-03-18", secondPlanting: "2025-04-04", secondHarvest: "2025-07-23" };
 export const demoTurnDate = "2025-05-26";
 export const metadata = sources.meta;
-export const smapRows = sources.smap;
 
 function volumeFor(crop: CropWater | undefined): { volume: number; source: string } | null {
   if (crop?.volumeM3) return { volume: crop.volumeM3, source: "Volumen declarado" };
@@ -121,16 +123,22 @@ export function prepareScenario(draft: PilotDraft | undefined, demo: boolean, as
     }
   }
 
-  const usingImerg = Object.keys(sources.imerg).length > 0;
-  const length = dayDistance(dates.firstPlanting, lastDay) + 1;
-  const days = Array.from({length}, (_, index) => {
-    const date = addDays(dates.firstPlanting, index);
+  const soilWater = initialSoilWater(sources.soil, sources.smap, dates.firstPlanting, assumedSoilWater);
+  const rain = historicalRain(dates.firstPlanting, lastDay, sources.imerg, sources.power);
+  const days = rain.map(({ date, rain }) => {
     const weather = sources.power[date];
-    return { date, rain: usingImerg ? sources.imerg[date] ?? null : weather?.rain ?? null,
-      et0: weather ? et0(date, weather, -17.42442, 2560) : null, tmin: weather?.tmin ?? null };
+    return { date, rain, et0: weather ? et0(date, weather, -17.42442, 2560) : null, tmin: weather?.tmin ?? null };
   });
+  const input = {
+    days, soil: sources.soil, turns, testTurnId: "turno", rainEfficiency: 0.85, irrigationEfficiency: 0.75,
+    initialFraction: soilWater.fraction, expansionFraction: assumedSoilWater, priority, rotations,
+  };
+  const usesSatelliteData = soilWater.estimate !== null || rain.some((day) => day.source === "IMERG Final");
+  const referenceInput = usesSatelliteData ? {
+    ...input, days: days.map((day, index) => ({ ...day, rain: rain[index].reference })), initialFraction: assumedSoilWater,
+  } : null;
   return {
-    input: { days, soil: sources.soil, turns, testTurnId: "turno", rainEfficiency: .85, irrigationEfficiency: .75, initialFraction: .72, priority, rotations },
-    volume: water.volume, area, volumeSource: water.source, history: Boolean(data), usingImerg,
+    input, referenceInput, rain, soilWater,
+    volume: water.volume, area, volumeSource: water.source, history: Boolean(data),
   };
 }

@@ -5,13 +5,13 @@ import { useEffect, useState } from "react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { NativeSelect } from "../../components/ui/native-select";
-import { ensoSource, hasEnsoCoverage, relevantEnso, type EnsoOutlook } from "../../domain/climate/enso";
+import { ensoSource, hasEnsoCoverage, relevantEnso } from "../../domain/climate/enso";
 import { ecocropSource, powerSource, rankCrops, type ClimateProfile, type CropUse } from "../../domain/climate/screening";
 import { localDate } from "../operations/model";
 import { decimal, type Coordinates } from "../pilot/draft";
 import { EnsoAttribution, labelMonth, seasonLabel, useEnso } from "./enso-outlook";
 
-const climateKey = "field-shift-climate-v2";
+const climateKey = "field-shift-climate-v3";
 const number = new Intl.NumberFormat("es-BO", { maximumFractionDigits: 1 });
 
 function metric(value: number | null, unit: string) {
@@ -39,27 +39,22 @@ function ClimatePanel({ params }: { params: string }) {
 
   useEffect(() => {
     const controller = new AbortController();
-    const debounce = window.setTimeout(() => {
-      fetch(`/api/climate?${params}`, { signal: controller.signal }).then(async (response) => {
-        if (!response.ok) throw new Error("NASA POWER");
-        const profile = await response.json() as ClimateProfile;
-        if (controller.signal.aborted) return;
-        try { localStorage.setItem(climateKey, JSON.stringify({ params, profile })); } catch {}
-        setState({ profile, cached: false });
-      }).catch(() => {
-        if (controller.signal.aborted) return;
-        let profile: ClimateProfile | null = null;
-        try {
-          const stored = JSON.parse(localStorage.getItem(climateKey) ?? "null");
-          if (stored?.params === params) profile = stored.profile;
-        } catch {}
-        setState({ profile, cached: Boolean(profile) });
-      });
-    }, 400);
-    return () => {
-      window.clearTimeout(debounce);
-      controller.abort();
-    };
+    fetch(`/api/climate?${params}`, { signal: controller.signal }).then(async (response) => {
+      if (!response.ok) throw new Error("NASA POWER");
+      const profile = await response.json() as ClimateProfile;
+      if (controller.signal.aborted) return;
+      try { localStorage.setItem(climateKey, JSON.stringify({ params, profile })); } catch {}
+      setState({ profile, cached: false });
+    }).catch(() => {
+      if (controller.signal.aborted) return;
+      let profile: ClimateProfile | null = null;
+      try {
+        const stored = JSON.parse(localStorage.getItem(climateKey) ?? "null");
+        if (stored?.params === params) profile = stored.profile;
+      } catch {}
+      setState({ profile, cached: Boolean(profile) });
+    });
+    return () => controller.abort();
   }, [params, attempt]);
 
   const profile = state?.profile;
@@ -68,6 +63,13 @@ function ClimatePanel({ params }: { params: string }) {
   const ph = decimal(phText);
   const phValid = Number.isFinite(ph) && ph >= 0 && ph <= 14;
   const crops = profile ? rankCrops(profile.crops[index], use, phValid ? ph : null) : null;
+  const eligibleCrops = crops?.filter((crop) => crop.eligible) ?? [];
+  const noFavorableCrop = eligibleCrops.length > 0 && eligibleCrops.every((crop) =>
+    crop.assessment && crop.assessment.category !== "recommended",
+  );
+  const cycleDays = Math.max(1, ...eligibleCrops.map((crop) => crop.days));
+  const outlook = season?.outlook;
+  const signals = outlook ? relevantEnso(outlook, month, cycleDays) : [];
   return (
     <section id="clima-parcela" aria-labelledby="climate-title" className="panel scroll-mt-5">
       <h2 id="climate-title" className="flex items-center gap-2 text-xl font-bold"><Sprout size={22} aria-hidden="true" /> Clima y cultivos para este punto</h2>
@@ -114,42 +116,53 @@ function ClimatePanel({ params }: { params: string }) {
           </dl>
           {!season && <p className="mb-3 text-sm text-muted">Consultando el boletín estacional…</p>}
           {season && !season.outlook && <p className="mb-3 text-sm text-muted">Boletín estacional no disponible. Confirma el panorama con <a href={ensoSource} className="underline">NOAA CPC</a>.</p>}
-          {season?.outlook && <EnsoAttribution outlook={season.outlook} cached={season.cached} />}
-          {season?.outlook && !hasEnsoCoverage(season.outlook, month, 1) && <p className="mt-1 text-sm text-muted">El boletín aún no cubre el mes de siembra elegido.</p>}
+          {noFavorableCrop && <p className="text-sm text-muted">Ninguna opción para el destino elegido tuvo un ajuste térmico favorable en este mes. Puedes comparar otro mes de siembra.</p>}
           <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-            {crops.map((crop) => <CropCard key={crop.species} crop={crop} month={month} outlook={season?.outlook ?? null} />)}
+            {crops.map((crop) => <CropCard key={crop.species} crop={crop} />)}
           </ul>
+          {outlook && <details className="mt-4 border-t border-line pt-3 text-sm">
+            <summary className="cursor-pointer font-semibold">Panorama estacional · Pacífico ecuatorial</summary>
+            {signals.length > 0 ? <>
+              <p className="mt-2 text-muted">Probabilidad de la fase en el Pacífico. Para la parcela, revisa el pronóstico local de lluvia y temperatura.</p>
+              <ul className="my-2 list-disc pl-5">{signals.map((signal) => <li key={signal.center}>{signal.phase} · {signal.probability}% en {seasonLabel(signal)}</li>)}</ul>
+            </> : <p className="mt-2 text-muted">{hasEnsoCoverage(outlook, month, cycleDays)
+              ? "El boletín no indica una señal de El Niño o La Niña por encima del umbral de seguimiento."
+              : "El boletín aún no cubre la campaña elegida."}</p>}
+            <EnsoAttribution outlook={outlook} cached={Boolean(season?.cached)} />
+          </details>}
         </div>
         <details className="mt-4 border-t border-line pt-3 text-sm">
           <summary className="min-h-8 cursor-pointer font-semibold">Cómo se calcula la aptitud</summary>
-          <p className="mt-1 text-muted">El orden usa el destino de la cosecha, las temperaturas diarias del mes de siembra y el pH medido si está disponible. El análisis compara cuatro cultivos de <a href={ecocropSource} className="underline">FAO EcoCrop</a> y requiere al menos tres ocurrencias completas del mes. La lluvia anual orienta la revisión del agua de riego.</p>
-          <p className="mt-2 text-muted">La cuadrícula de <a href={powerSource} className="underline">NASA POWER</a> describe el clima regional. La humedad es informativa. La señal ENSO indica cuándo revisar la campaña con fuentes locales de lluvia y temperatura.</p>
+          <p className="mt-1 text-muted">Simulamos una siembra el primer día del mes elegido en cada año del historial. Para cada cultivo usamos el punto medio del rango de días de <a href={ecocropSource} className="underline">FAO EcoCrop</a>. Contamos solo los ciclos que tienen una temperatura media para cada día y exigimos al menos tres ciclos completos.</p>
+          <p className="mt-2 text-muted">La categoría resume cuántos ciclos cumplieron el criterio térmico. El orden considera el destino de la cosecha y el pH medido. La cuadrícula de <a href={powerSource} className="underline">NASA POWER</a> describe el clima regional. La lluvia, el suelo y el riego requieren revisión aparte.</p>
         </details>
       </>}
     </section>
   );
 }
 
-function CropCard({ crop, month, outlook }: { crop: ReturnType<typeof rankCrops>[number]; month: string; outlook: EnsoOutlook | null }) {
-  const signal = outlook && relevantEnso(outlook, month, crop.days).sort((a, b) => b.probability - a.probability)[0];
-  const labels = { recommended: "Buen ajuste térmico", conditional: "Ajuste térmico condicionado", unsuitable: "Ajuste térmico bajo" };
+function CropCard({ crop }: { crop: ReturnType<typeof rankCrops>[number] }) {
+  const labels = { recommended: "Favorable por temperatura", conditional: "Posible con reservas", unsuitable: "Poco favorable por temperatura" };
   const climateStatus = crop.assessment ? labels[crop.assessment.category] : "Datos insuficientes";
   return (
     <li className="rounded-xl border border-line bg-surface p-3">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <h3 className="font-bold">{crop.name}</h3>
-          <p className="text-xs text-muted">{crop.use === "forraje" ? "Forraje" : "Consumo"} · {crop.samples} años con el mes completo</p>
-        </div>
-      </div>
-      <p className="mt-2 text-sm font-semibold">{climateStatus}{signal && crop.assessment && " · revisar campaña"}</p>
+      <h3 className="font-bold">{crop.name}</h3>
+      <p className="text-xs text-muted">{crop.use === "forraje" ? "Forraje" : "Consumo"} · ciclo de referencia de {crop.days} días</p>
+      <p className="mt-2 text-sm font-semibold">{climateStatus}</p>
       {!crop.eligible && <p className="text-xs font-semibold text-muted">Fuera del destino elegido.</p>}
       {crop.assessment && <p className="mt-1 flex items-start gap-1 text-xs text-muted"><ThermometerSun size={14} className="shrink-0" aria-hidden="true" />
-        {crop.assessment.optimal} de {crop.assessment.observations} días en el óptimo térmico · {crop.assessment.outside} fuera del límite.
+        {crop.favorableCycles} de {crop.samples} ciclos históricos favorables{crop.conditionalCycles > 0 && `, ${crop.conditionalCycles} con reservas`}. Le favorecen {crop.temperature[1]}–{crop.temperature[2]} °C.
       </p>}
+      {crop.assessment?.category === "unsuitable" && <p className="mt-1 text-xs text-muted">
+        En al menos la mitad de los ciclos, la frecuencia o la magnitud de las temperaturas desfavorables superó el criterio evaluado.
+      </p>}
+      {!crop.assessment && <p className="mt-1 text-xs text-muted">Hay {crop.samples} ciclos completos en el histórico. Se requieren al menos 3.</p>}
       <p className="mt-1 text-xs text-muted">Lluvia anual {crop.optimalRain === null ? "sin dato" : crop.optimalRain ? "en el rango óptimo" : "fuera del rango óptimo"}.</p>
       {crop.phMatch !== null && <p className="text-xs text-muted">pH medido {crop.phMatch ? "en el rango óptimo" : "fuera del rango óptimo"} ({crop.optimalPh.map((value) => number.format(value)).join("–")}).</p>}
-      {signal && <p className="mt-2 rounded-md bg-[#f4ebd7] p-2 text-xs text-[#624217]">{signal.phase} · {signal.probability}% en {seasonLabel(signal)}. Confirma el panorama local antes de sembrar.</p>}
+      {crop.assessment && <details className="mt-2 text-xs text-muted">
+        <summary className="cursor-pointer font-semibold">Ver datos del ciclo</summary>
+        <p className="mt-1">EcoCrop estima {crop.cycleRange.join("–")} días. Entre todos los ciclos evaluados hubo {crop.assessment.optimal} de {crop.assessment.observations} días en el rango favorable y {crop.assessment.outside} fuera de los límites de {crop.temperature[0]}–{crop.temperature[3]} °C.</p>
+      </details>}
     </li>
   );
 }

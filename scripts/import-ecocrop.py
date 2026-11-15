@@ -19,12 +19,13 @@ for code, (name, use) in SPECIES.items():
     row = rows[code]
     temperature = [float(row[key]) for key in ("TMIN", "TOPMN", "TOPMX", "TMAX")]
     rainfall = [float(row[key]) for key in ("RMIN", "ROPMN", "ROPMX", "RMAX")]
-    days = int(row["GMIN"])
-    if temperature != sorted(temperature) or rainfall != sorted(rainfall) or not 1 <= days <= 365:
+    minimum_days, maximum_days = (int(row[key]) for key in ("GMIN", "GMAX"))
+    days = (minimum_days + maximum_days + 1) // 2
+    if temperature != sorted(temperature) or rainfall != sorted(rainfall) or not 1 <= minimum_days <= maximum_days <= 365:
         raise ValueError(f"Rangos inválidos para {name}")
     catalogue.append({
         "code": code, "name": name, "species": row["ScientificName"], "use": use,
-        "days": days, "temperature": temperature, "rainfall": rainfall,
+        "days": days, "cycleRange": [minimum_days, maximum_days], "temperature": temperature, "rainfall": rainfall,
         "optimalPh": [float(row[key]) for key in ("PHOPMN", "PHOPMX")],
     })
 

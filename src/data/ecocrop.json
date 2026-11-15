@@ -4,7 +4,11 @@
     "name": "Maíz forrajero",
     "species": "Zea mays",
     "use": "forraje",
-    "days": 65,
+    "days": 215,
+    "cycleRange": [
+      65,
+      365
+    ],
     "temperature": [
       10.0,
       18.0,
@@ -27,7 +31,11 @@
     "name": "Avena forrajera",
     "species": "Avena sativa",
     "use": "forraje",
-    "days": 110,
+    "days": 190,
+    "cycleRange": [
+      110,
+      270
+    ],
     "temperature": [
       5.0,
       16.0,
@@ -50,7 +58,11 @@
     "name": "Cebada forrajera",
     "species": "Hordeum vulgare",
     "use": "forraje",
-    "days": 90,
+    "days": 165,
+    "cycleRange": [
+      90,
+      240
+    ],
     "temperature": [
       2.0,
       15.0,
@@ -73,7 +85,11 @@
     "name": "Haba",
     "species": "Vicia faba",
     "use": "consumo",
-    "days": 100,
+    "days": 125,
+    "cycleRange": [
+      100,
+      150
+    ],
     "temperature": [
       5.0,
       18.0,

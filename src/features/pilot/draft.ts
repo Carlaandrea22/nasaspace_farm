@@ -47,6 +47,16 @@ export type PilotDraft = {
   cropWaterByParcel?: Record<string, CropWater>;
 };
 
+export type DraftPatch = Pick<PilotDraft, "parcel" | "cropWater">;
+
+export function applyDraftPatch(draft: PilotDraft, patch: DraftPatch): PilotDraft {
+  const previous = draft.cropWater;
+  const byParcel = draft.cropWaterByParcel ?? (previous?.parcelKey !== undefined ? { [previous.parcelKey]: previous } : {});
+  const cropWater = patch.cropWater;
+  const updatedByParcel = cropWater?.parcelKey !== undefined ? { ...byParcel, [cropWater.parcelKey]: cropWater } : byParcel;
+  return { ...draft, ...patch, cropWaterByParcel: updatedByParcel };
+}
+
 export function cropForParcel(draft: PilotDraft | undefined) {
   const key = locationKey(draft?.parcel);
   return draft?.cropWaterByParcel?.[key] ?? (draft?.cropWater?.parcelKey === key ? draft?.cropWater : undefined);

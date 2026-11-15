@@ -1,8 +1,10 @@
 from datetime import date, datetime, timedelta, timezone
 import importlib.util
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location(
     "import_nasa", Path(__file__).resolve().parent.parent / "scripts/import-nasa.py",
@@ -42,6 +44,25 @@ class NasaImportTest(unittest.TestCase):
             days = nasa.import_imerg_daily(path, date(2025, 3, 1), date(2025, 3, 3))
             self.assertEqual(days, {"2025-03-01": 0.0, "2025-03-02": None, "2025-03-03": None})
 
+    def test_power_imerg_preserves_zero_and_missing_values(self):
+        payload = {
+            "header": {"sources": ["IMERG"], "time_standard": "UTC", "start": "20241101",
+                       "end": "20241103", "fill_value": -999.0},
+            "geometry": {"coordinates": [-66.183, -17.424, 3126.04]},
+            "parameters": {"IMERG_PRECTOT": {"units": "mm/day"}},
+            "properties": {"parameter": {"IMERG_PRECTOT": {"20241101": 1.48,
+                                                             "20241102": 0, "20241103": -999}}},
+        }
+        with patch.object(nasa, "fetch", return_value=json.dumps(payload).encode()):
+            days, source = nasa.prepare_imerg_final_power(date(2024, 11, 1), date(2024, 11, 3))
+        self.assertEqual(days, {"2024-11-01": 1.48, "2024-11-02": 0.0, "2024-11-03": None})
+        self.assertIn("parameters=IMERG_PRECTOT", source)
+
+    def test_power_imerg_rejects_dates_that_could_include_late_run(self):
+        today = datetime.now(timezone.utc).date()
+        with self.assertRaisesRegex(ValueError, "IMERG Late"):
+            nasa.prepare_imerg_final_power(today - timedelta(days=5), today - timedelta(days=1))
+
     def test_appeears_holds_unreviewed_values_as_suspect(self):
         with TemporaryDirectory() as temp:
             source = Path(temp) / "appeears.csv"
@@ -57,6 +78,26 @@ class NasaImportTest(unittest.TestCase):
             self.assertEqual(result[0]["quality"], "suspect")
             self.assertEqual(result[1]["quality"], "missing")
             self.assertIsNone(result[1]["surface"])
+
+    def test_appeears_aggregates_eight_intervals_without_filling_gaps(self):
+        with TemporaryDirectory() as temp:
+            source = Path(temp) / "appeears.csv"
+            target = Path(temp) / "smap.csv"
+            header = "Latitude,Longitude,Date,SPL4SMGP_008_Geophysical_Data_sm_rootzone,SPL4SMGP_008_Geophysical_Data_sm_surface\n"
+            rows = [
+                f"-17.42442,-66.18272,2024-11-11 {hour:02}:30:00 UTC,0.3,{hour / 100}\n"
+                for hour in range(1, 24, 3)
+            ]
+            source.write_text(header + "".join(rows), encoding="utf-8")
+            nasa.normalize_appeears(source, target)
+            self.assertEqual(nasa.import_smap(target), [
+                {"date": "2024-11-11", "surface": 0.115, "root": 0.3, "quality": "suspect"},
+            ])
+            source.write_text(header + "".join(rows[:-1]), encoding="utf-8")
+            nasa.normalize_appeears(source, target)
+            self.assertEqual(nasa.import_smap(target), [
+                {"date": "2024-11-11", "surface": None, "root": None, "quality": "missing"},
+            ])
 
 
 if __name__ == "__main__":

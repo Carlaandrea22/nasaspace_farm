@@ -1,4 +1,4 @@
-import type { PilotDraft } from "../../features/pilot/draft";
+import { applyDraftPatch, type DraftPatch, type PilotDraft } from "../../features/pilot/draft";
 
 const databaseName = "field-shift";
 const storeName = "drafts";
@@ -34,7 +34,7 @@ export async function readPilotDraft(): Promise<PilotDraft | undefined> {
   }
 }
 
-export async function savePilotDraft(patch: Pick<PilotDraft, "parcel" | "cropWater">) {
+export async function savePilotDraft(patch: DraftPatch) {
   const database = await openDatabase();
   try {
     await new Promise<void>((resolve, reject) => {
@@ -48,11 +48,7 @@ export async function savePilotDraft(patch: Pick<PilotDraft, "parcel" | "cropWat
       request.onsuccess = () => {
         try {
           const draft: PilotDraft = currentDraft(request.result) ?? { id: crypto.randomUUID(), version: 1 };
-          const previous = draft.cropWater;
-          const byParcel = draft.cropWaterByParcel ?? (previous?.parcelKey !== undefined ? { [previous.parcelKey]: previous } : {});
-          const cropWater = patch.cropWater;
-          const updatedByParcel = cropWater?.parcelKey !== undefined ? { ...byParcel, [cropWater.parcelKey]: cropWater } : byParcel;
-          store.put({ ...draft, ...patch, cropWaterByParcel: updatedByParcel }, key);
+          store.put(applyDraftPatch(draft, patch), key);
         } catch (error) {
           cause = error;
           transaction.abort();
