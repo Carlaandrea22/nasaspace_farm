@@ -17,7 +17,7 @@ Para una demostración preparada, desde **Encuentra tu parcela** usar **Tirani**
 | Objetivo local | Implementación | Alcance real |
 |---|---|---|
 | Humedad superficial y radicular SMAP | Subconjunto público NASA POWER SMAP L4; 20 celdas regionales | Hasta 2026-11-10. Superficie 0–5 cm y raíces 0–100 cm. Grilla de unos 9 km; producto marcado `reviewing` por el proveedor. No es medición dentro de la parcela. |
-| GPM IMERG casi en tiempo real | Corte Early V07C validado con 144 gránulos, tres días locales completos 2026-11-11 a 13 | Dos celdas de 0,1°, La Maica (−17,45 / −66,15) y Tirani (−17,35 / −66,15). Fuera de las celdas o fechas verificadas se identifica la lluvia modelada. |
+| GPM IMERG casi en tiempo real | Corte Early V07C validado con 192 gránulos. Días locales completos del 11 al 13 de noviembre en La Maica y del 11 al 14 en Tirani. | Dos celdas de 0,1°, La Maica (−17,45 / −66,15) y Tirani (−17,35 / −66,15). Fuera de las celdas o fechas verificadas se identifica la lluvia modelada. |
 | Radiación y temperatura NASA POWER | Consulta por coordenada, tres años completos para balance histórico | Para esta entrega, 2023–2025 UTC. Radiación, viento a 2 m, humedad, temperaturas y elevación de grilla alimentan ET₀ FAO-56. IMERG Final vía POWER tiene prioridad en la lluvia histórica. |
 | Clima histórico y aptitud | Módulo existente POWER + EcoCrop | Diez años completos, 2016–2025, tiempo solar local. Evaluación térmica; no garantiza cosecha ni sustituye la comparación hídrica. |
 | Pronóstico a 7–14 días | Open-Meteo por coordenada, lluvia, ET₀, mínimas y máximas | Pronóstico complementario, no observación ni pronóstico de NASA. Un hueco invalida el balance continuo. |
