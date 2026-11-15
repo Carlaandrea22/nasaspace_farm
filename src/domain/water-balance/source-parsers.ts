@@ -45,18 +45,21 @@ export function soilResponseStatus(payload: unknown): Exclude<SoilStatus, 'unava
 }
 
 const fields = {tmax:['T2M_MAX','C'],tmin:['T2M_MIN','C'],rh:['RH2M','%'],wind:['WS2M','m/s'],solar:['ALLSKY_SFC_SW_DWN','MJ/m^2/day'],rain:['PRECTOTCORR','mm/day'],imerg:['IMERG_PRECTOT','mm/day']} as const;
-export type HistoryDay = Weather & {date:string;rain:number|null;rainSource:'IMERG Final vía POWER'|'POWER'|'Sin dato'};
+export type HistoryDay = Weather & {date:string;tmean:number|null;rain:number|null;rainSource:'IMERG Final vía POWER'|'POWER'|'Sin dato'};
 export function parseBalanceHistory(payload:unknown, from:string, to:string) {
   const data=payload as {header?:{time_standard?:string;fill_value?:number;sources?:string[]};parameters?:Record<string,{units:string}>;properties?:{parameter?:Record<string,Record<string,unknown>>};geometry?:{coordinates:number[]}};
   if(data.header?.time_standard!=='UTC'||!data.properties?.parameter||Object.values(fields).some(([name,units])=>data.parameters?.[name]?.units!==units)) throw new Error('Unidades NASA POWER no verificadas');
   const elevation=data.geometry?.coordinates[2];
   if(typeof elevation!=='number'||!Number.isFinite(elevation)) throw new Error('Sin elevación de la grilla');
   const days:HistoryDay[]=[];
+  const meanValues = data.parameters?.T2M?.units === 'C' ? data.properties.parameter.T2M : undefined;
   for(let t=Date.parse(from+'T00:00:00Z');t<=Date.parse(to+'T00:00:00Z');t+=86400000){
     const date=new Date(t).toISOString().slice(0,10), key=date.replaceAll('-','');
     function read(field:keyof typeof fields){const raw=data.properties?.parameter?.[fields[field][0]]?.[key];return typeof raw==='number'&&Number.isFinite(raw)&&raw!==data.header?.fill_value&&raw>=(field==='tmin'||field==='tmax'?-90:0)&&(field!=='rh'||raw<=100)?raw:null;}
     const imerg=data.header.sources?.includes('IMERG')?read('imerg'):null, rain=read('rain');
-    days.push({date,tmin:read('tmin'),tmax:read('tmax'),rh:read('rh'),wind:read('wind'),solar:read('solar'),rain:imerg??rain,rainSource:imerg!==null?'IMERG Final vía POWER':rain!==null?'POWER':'Sin dato'});
+    const mean = meanValues?.[key];
+    const tmean = typeof mean === 'number' && Number.isFinite(mean) && mean !== data.header.fill_value && mean >= -90 && mean <= 80 ? mean : null;
+    days.push({date,tmean,tmin:read('tmin'),tmax:read('tmax'),rh:read('rh'),wind:read('wind'),solar:read('solar'),rain:imerg??rain,rainSource:imerg!==null?'IMERG Final vía POWER':rain!==null?'POWER':'Sin dato'});
   }
   return {days,elevation};
 }

@@ -13,6 +13,44 @@ async function checkSteps(page, completed){
   assert.deepEqual(await steps.evaluateAll(nodes=>nodes.map(n=>n.dataset.state)),Array.from({length:4},(_,i)=>i<completed?'complete':i===completed?'current':'pending'));
 }
 
+test('Tirani entrega el perfil local sin esperar la humedad modelada', {timeout:15000}, async()=>{
+  const browser=await chromium.launch(process.env.PLAYWRIGHT_CHROMIUM_CHANNEL?{channel:process.env.PLAYWRIGHT_CHROMIUM_CHANNEL}:{});
+  let finishMoisture;
+  const pendingMoisture=new Promise(resolve=>{finishMoisture=resolve;});
+  try {
+    const context=await browser.newContext();
+    const response=await context.request.get(origin+'/api/parcel-sources?kind=soil&lat=-17.34170&lon=-66.15458',{timeout:4000});
+    assert.ok(response.ok());
+    const data=await response.json();
+    assert.equal(data.soilStatus,'available');
+    assert.equal(data.soil.distanceM,10);
+    assert.equal(data.soil.profile.length,5);
+    assert.equal('moisture' in data,false);
+
+    await context.route('**/api/parcel-sources?kind=moisture&*',async route=>{
+      await pendingMoisture;
+      await route.fulfill({json:{moisture:null}});
+    });
+    const page=await context.newPage();
+    page.setDefaultTimeout(5000);
+    await page.goto(origin+'/consulta?lat=-17.34170&lon=-66.15458');
+    const moistureRequest=page.waitForRequest(request=>request.url().includes('kind=moisture'));
+    await page.getByRole('button',{name:'Ya tengo un cultivo y quiero revisar el agua',exact:true}).click();
+    await moistureRequest;
+    const calculate=page.getByRole('button',{name:'Ver cómo estará el agua',exact:true});
+    await calculate.waitFor();
+    assert.ok(await calculate.isEnabled());
+    await page.getByText('¿De dónde salen los datos de mi terreno?',{exact:true}).click();
+    await page.getByText(/Referencia a 10 m del punto seleccionado/).waitFor();
+    const moistureResponse=page.waitForResponse(response=>response.url().includes('kind=moisture'));
+    finishMoisture();
+    await moistureResponse;
+  } finally {
+    finishMoisture();
+    await browser.close();
+  }
+});
+
 test('consulta pública con fuentes reales, agua, tres rotaciones, impresión y móvil', {timeout:180000}, async()=>{
   const browser=await chromium.launch(process.env.PLAYWRIGHT_CHROMIUM_CHANNEL?{channel:process.env.PLAYWRIGHT_CHROMIUM_CHANNEL}:{});
   try {
@@ -66,16 +104,26 @@ test('consulta pública con fuentes reales, agua, tres rotaciones, impresión y 
     await page.getByRole('button',{name:'Quiero planificar qué sembrar después',exact:true}).click();
     const rotations=page.locator('#parcel-rotations');
     await checkSteps(page,2);
-    assert.equal(await rotations.locator('select[name=first]').inputValue(),'Maíz forrajero');
-    assert.equal(await rotations.locator('input[name=start]').inputValue(),date(-30));
-    await rotations.locator('input[name=start]').fill(new Date().getUTCFullYear()+'-11-15');
-    await rotations.locator('select[name=second]').selectOption('Avena forrajera');
-    await rotations.getByRole('button',{name:'Comparar tres rotaciones'}).click();
+    assert.equal(await rotations.locator('select[name=crop]').inputValue(),'Maíz forrajero');
+    assert.equal(await rotations.locator('form input').count(),1);
+    await rotations.locator('input[name=harvest]').fill(new Date().getUTCFullYear()+1+'-01-31');
+    await rotations.getByRole('button',{name:'Ver qué puedo sembrar'}).click();
     await rotations.getByRole('heading',{name:/Para revisar primero:/}).waitFor();
     assert.equal(await rotations.getByRole('article').count(),3);
+    assert.equal(await rotations.getByText('Siembra estimada desde',{exact:false}).count(),3);
     await checkSteps(page,4);
-    assert.match(await rotations.innerText(),/Para revisar primero: Cebada forrajera/);
-    await page.getByText('Ver clima y cultivos de este lugar',{exact:true}).click();
+    await page.setViewportSize({width:390,height:844});
+    const cover=page.locator('.consulta-portada');
+    assert.ok((await cover.boundingBox()).height < 300);
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth),true);
+    await rotations.getByRole('article').locator('img').evaluateAll(images=>Promise.all(images.map(image=>image.decode())));
+    const [rotationPdf]=await Promise.all([
+      page.waitForEvent('download'),
+      rotations.getByRole('button',{name:'Descargar aviso de siembra (PDF)'}).click(),
+    ]);
+    assert.match(rotationPdf.suggestedFilename(),/^aviso-siembra-.*\.pdf$/);
+    assert.equal((await readFile(await rotationPdf.path())).subarray(0,5).toString(),'%PDF-');
+    await page.setViewportSize({width:1440,height:1000});
     await page.locator('#clima-parcela').getByText('Temperatura media',{exact:true}).waitFor();
     await page.evaluate(()=>{window.print=()=>{window.__printed=true;};});
     await page.getByRole('button',{name:'Imprimir o guardar PDF'}).click();
@@ -134,13 +182,21 @@ test('sin cobertura de suelo conserva el pronóstico, explica el siguiente paso 
  }finally{await browser.close();}
 });
 
-test('papa y alfalfa piden sus fechas, calculan y no sustituyen el cultivo en rotaciones; responsive 1440, 390 y 320', {timeout:60000},async()=>{
+test('papa y alfalfa comparten catálogo y fechas entre agua y rotaciones; responsive 1440, 390 y 320', {timeout:60000},async()=>{
  const browser=await chromium.launch({channel:process.env.PLAYWRIGHT_CHROMIUM_CHANNEL??'chrome'});
  try{
   const context=await browser.newContext({viewport:{width:1440,height:1000},reducedMotion:'reduce'}),page=await context.newPage();
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await mockWeather(context);
   await context.route('**/api/parcel-sources?**',route=>route.fulfill({json:{soil:{profile:[{top:0,bottom:100,fc:.3,wp:.15,sand:40,clay:25}],point:{latitude:-17.42442,longitude:-66.18272},distanceM:0,source:'Suelo de prueba',url:'https://rest.isric.org',queriedAt:new Date().toISOString()},soilStatus:'available',moisture:{date:date(),root:.22},smap:null,queriedAt:new Date().toISOString()}}));
+  let hasDailyMeans=true;
+  await context.route('**/api/parcel-sources?kind=history&*',route=>route.fulfill({json:{
+    from:'2024-01-01',to:'2025-12-31',elevation:2600,smap:null,url:'https://power.larc.nasa.gov',
+    days:Array.from({length:731},(_,index)=>({
+      date:new Date(Date.UTC(2024,0,1+index)).toISOString().slice(0,10),
+      rain:2,tmin:10,tmax:24,tmean:hasDailyMeans?18:null,rh:60,wind:2,solar:18,rainSource:'IMERG Final vía POWER',
+    })),
+  }}));
   await page.goto(origin+'/consulta?lat=-17.42442&lon=-66.18272&tipo=parcela&area=1');
   await page.getByRole('button',{name:'Ya tengo un cultivo y quiero revisar el agua',exact:true}).click();
   const water=page.locator('#parcel-water');
@@ -160,8 +216,31 @@ test('papa y alfalfa piden sus fechas, calculan y no sustituyen el cultivo en ro
   await water.getByRole('button',{name:'Ver cómo estará el agua'}).click();
   await water.getByText('Agua que necesitaría el cultivo',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Quiero planificar qué sembrar después',exact:true}).click();
-  assert.equal(await page.locator('#parcel-rotations select[name=first]').inputValue(),'');
-  await page.getByText(/Ya puedes revisar el agua de tu cultivo de papa/).waitFor();
+  const rotations=page.locator('#parcel-rotations');
+  assert.equal(await rotations.locator('select[name=crop]').inputValue(),'Papa');
+  assert.equal(await rotations.locator('select[name=crop] option:not([disabled])').count(),12);
+  assert.equal(await rotations.locator('input[name=harvest]').inputValue(),date(60));
+  assert.equal(await rotations.locator('form :is(input,select)').count(),2);
+  await rotations.locator('input[name=harvest]').fill('2027-05-01');
+  await rotations.getByRole('button',{name:'Ver qué puedo sembrar'}).click();
+  await rotations.getByRole('heading',{name:/Para revisar primero:/}).waitFor();
+  assert.equal(await rotations.getByRole('article').count(),3);
+  assert.equal(await rotations.getByText('Calendario local por confirmar',{exact:true}).count(),3);
+  const photos=rotations.getByRole('article').locator('img');
+  assert.equal(await photos.count(),3);
+  await photos.evaluateAll(images=>Promise.all(images.map(async image=>{image.loading='eager';await image.decode();})));
+  const firstCard=rotations.getByRole('article').first();
+  const photo=await firstCard.locator('img').boundingBox();
+  const title=await firstCard.getByRole('heading').boundingBox();
+  assert.ok(photo.x+photo.width<=title.x);
+  assert.equal(await firstCard.locator('time[datetime]').count(),2);
+  await page.setViewportSize({width:320,height:720});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth),true);
+  const mobilePhoto=await firstCard.locator('img').boundingBox();
+  const mobileTitle=await firstCard.getByRole('heading').boundingBox();
+  assert.ok(mobilePhoto.y+mobilePhoto.height<=mobileTitle.y);
+  await page.setViewportSize({width:1440,height:1000});
+  assert.equal(await rotations.getByText('Sin dato',{exact:true}).count(),0);
   await page.getByRole('button',{name:'Ya tengo un cultivo y quiero revisar el agua',exact:true}).click();
   await checkSteps(page,4);
   await water.getByRole('button',{name:'Cambiar cultivo o riego'}).click();
@@ -179,6 +258,14 @@ test('papa y alfalfa piden sus fechas, calculan y no sustituyen el cultivo en ro
   await water.getByRole('button',{name:'Ver cómo estará el agua'}).click();
   await water.getByText('Agua que necesitaría el cultivo',{exact:true}).waitFor();
   assert.deepEqual(errors,[]);
+  hasDailyMeans=false;
+  await page.reload();
+  await page.getByRole('button',{name:'Quiero planificar qué sembrar después',exact:true}).click();
+  await rotations.locator('select[name=crop]').selectOption('Papa');
+  await rotations.locator('input[name=harvest]').fill('2027-05-01');
+  await rotations.getByRole('button',{name:'Ver qué puedo sembrar'}).click();
+  await rotations.getByRole('heading',{name:/Para revisar primero:/}).waitFor();
+  assert.equal(await rotations.getByText('Calendario local por confirmar',{exact:true}).count(),0);
  }finally{await browser.close();}
 });
 
@@ -215,7 +302,7 @@ test('recorrido desde el mapa sin manejo prellenado: elegir, completar, calcular
   const [report]=await Promise.all([context.waitForEvent('page'),link.click()]);report.setDefaultTimeout(90000);
   await report.getByRole('heading',{name:'Resumen de la parcela',exact:true}).waitFor();
   assert.equal(await report.locator('#parcel-water').count(),0);
-  assert.equal(await report.locator('#clima-parcela').isVisible(),false);
+  await report.locator('header.consulta-portada + #clima-parcela').waitFor();
   await report.screenshot({path:'.data-cache/verification/demo-elegir.png',fullPage:true});
   await report.getByRole('button',{name:'Ya tengo un cultivo y quiero revisar el agua',exact:true}).click();
   assert.equal(await report.getByText('Datos de suelo disponibles.',{exact:true}).count(),0);
@@ -242,11 +329,9 @@ test('recorrido desde el mapa sin manejo prellenado: elegir, completar, calcular
   await water.screenshot({path:'.data-cache/verification/demo-agua.png'});
   await report.getByRole('button',{name:'Quiero planificar qué sembrar después',exact:true}).click();
   const rotations=report.locator('#parcel-rotations');
-  assert.equal(await rotations.locator('select[name=first]').inputValue(),'Maíz forrajero');
-  assert.equal(await rotations.locator('select[name=second]').inputValue(),'');
-  await rotations.locator('select[name=second]').selectOption('Avena forrajera');
-  await rotations.getByRole('button',{name:'Comparar tres rotaciones'}).click();
-  await rotations.getByRole('heading',{name:/Para revisar primero:|Ninguna estrategia/}).waitFor();
+  assert.equal(await rotations.locator('select[name=crop]').inputValue(),'Maíz forrajero');
+  await rotations.getByRole('button',{name:'Ver qué puedo sembrar'}).click();
+  await rotations.getByRole('heading',{name:/Para revisar primero:/}).waitFor();
   assert.equal(await rotations.getByRole('article').count(),3);
   await report.evaluate(()=>{window.print=()=>{window.__printed=true;};});
   await report.getByRole('button',{name:'Imprimir o guardar PDF'}).click();

@@ -12,7 +12,7 @@ export type Crop = {
   seedMonths: readonly number[];
   use: "forage" | "grain";
   frostC?: number;
-  family?: "cereal" | "legume";
+  family?: "cereal" | "legume" | "nightshade" | "carrot" | "amaryllis" | "daisy";
 };
 export type Season = { start: string; end: string; crop: Crop };
 export type Rotation = { id: string; seasons: Season[]; restrictions: string[] };
@@ -220,7 +220,7 @@ function evaluateRotation(input: BalanceInput, rotation: Rotation, irrigation: M
   for (const [index, season] of seasons.entries()) {
     const duration = dayDistance(season.start, season.end) + 1;
     if (!Number.isFinite(duration) || duration < season.crop.minDays || duration > season.crop.maxDays ||
-        !season.crop.seedMonths.includes(Number(season.start.slice(5, 7))) || (index > 0 && season.start <= seasons[index - 1].end)) {
+        (season.crop.seedMonths.length > 0 && !season.crop.seedMonths.includes(Number(season.start.slice(5, 7)))) || (index > 0 && season.start <= seasons[index - 1].end)) {
       reasons.push(`${season.crop.name}: la ventana, la duración o el orden no encajan con el calendario evaluado.`);
       excluded = true;
     }

@@ -14,7 +14,7 @@ import { rootCapacity } from '../../domain/water-balance/model';
 import type { ReferenceCase } from '../territory/reference';
 import type { ConsultationMode, ConsultationPhase } from './consultation-progress';
 
-export type ParcelEvidence = {soil:ParcelSoil;soilStatus?:SoilStatus;moisture:ParcelMoisture;smap:ReturnType<typeof smapSummary>;queriedAt:string};
+export type ParcelEvidence = {soil:ParcelSoil;soilStatus?:SoilStatus;moisture?:ParcelMoisture;smap:ReturnType<typeof smapSummary>;queriedAt:string};
 export default function ParcelDecision({ mode, parcel, demo, account, savedParcelId, onProgress }: {
   mode: 'water' | 'rotations'; parcel: Parcel; demo?: ReferenceCase; account: boolean; savedParcelId?: string;
   onProgress: (mode: ConsultationMode, phase: ConsultationPhase) => void;
@@ -42,10 +42,29 @@ export default function ParcelDecision({ mode, parcel, demo, account, savedParce
   useEffect(()=>{
     const controller=new AbortController();
     const params=new URLSearchParams({lat:String(parcel.latitude),lon:String(parcel.longitude)});
-    fetch('/api/parcel-sources?'+params,{signal:controller.signal}).then(async r=>{
-      if(!r.ok)throw new Error('Fuente');
-      const result:ParcelEvidence=await r.json();if(!controller.signal.aborted){setEvidence(result);setError('');}
-    }).catch(()=>{if(!controller.signal.aborted)setError('No pudimos obtener los datos del suelo de esta ubicación.');});
+    async function loadEvidence() {
+      let result: ParcelEvidence;
+      try {
+        const response=await fetch('/api/parcel-sources?kind=soil&'+params,{signal:controller.signal});
+        if(!response.ok)throw new Error('Fuente');
+        result=await response.json();
+      } catch {
+        if(!controller.signal.aborted)setError('No pudimos obtener los datos del suelo de esta ubicación.');
+        return;
+      }
+      if(controller.signal.aborted)return;
+      setEvidence(result);
+      setError('');
+      if(!result.soil || result.moisture!==undefined)return;
+
+      let moisture: ParcelMoisture = null;
+      try {
+        const response=await fetch('/api/parcel-sources?kind=moisture&'+params,{signal:controller.signal});
+        if(response.ok) ({moisture}=await response.json());
+      } catch { /* The soil profile remains usable while modeled moisture is unavailable. */ }
+      if(!controller.signal.aborted)setEvidence({...result,moisture});
+    }
+    void loadEvidence();
     return()=>controller.abort();
   },[parcel.latitude,parcel.longitude,attempt]);
   return <div className="grid min-w-0 gap-4">

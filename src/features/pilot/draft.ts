@@ -27,6 +27,7 @@ export type CropWater = {
   volumeM3: number | null;
   currentCrop?: string;
   currentPlanting?: string;
+  currentHarvest?: string;
   harvestUse?: string;
   turnStatus?: string;
   flowLs?: number | null;

@@ -3,14 +3,12 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, ChevronRight, Droplets, Map, MapPin, Printer, Scan, Sprout } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, Droplets, MapPin, Printer, Scan, Sprout } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
 import { authClient } from "../../lib/browser/auth-client";
 import { ParcelClimate } from "../climate/parcel-climate";
 import { getReferenceCase, type ReferenceCase } from "../territory/reference";
-import { TerritorySummary } from "../territory/summary";
-import type { Territory } from "../territory/types";
 import { coordinates, decimal, type Coordinates } from "./draft";
 import { ConsultationProgress, type ConsultationMode, type ConsultationPhase } from "./consultation-progress";
 
@@ -29,21 +27,14 @@ export function ParcelReportQuery() {
   const area = decimal(params.get("area") ?? "");
   const reference = getReferenceCase(point.latitude, point.longitude);
   const demo = reference && params.get('demo') === reference && params.get('tipo') !== 'parcela' ? reference : undefined;
-  const view = new URLSearchParams();
-  for (const field of ["bbox", "width", "height"]) {
-    const value = params.get(field);
-    if (value) view.set(field, value);
-  }
   return <ParcelReport key={params.toString()} point={point} parcel={params.get("tipo") === "parcela"}
-    area={area > 0 ? area : null} view={view.toString()} demo={demo} savedParcelId={params.get("guardada") ?? undefined} />;
+    area={area > 0 ? area : null} demo={demo} savedParcelId={params.get("guardada") ?? undefined} />;
 }
 
-function ParcelReport({ point, parcel, area, view, demo, savedParcelId }: {
-  point: Coordinates; parcel: boolean; area: number | null; view: string; demo?:ReferenceCase; savedParcelId?: string;
+function ParcelReport({ point, parcel, area, demo, savedParcelId }: {
+  point: Coordinates; parcel: boolean; area: number | null; demo?:ReferenceCase; savedParcelId?: string;
 }) {
   const { data: session, isPending } = authClient.useSession();
-  const [attempt, setAttempt] = useState(0);
-  const [territory, setTerritory] = useState<Territory | null>();
   const [decision, setDecision] = useState<{ water?: boolean; rotations?: boolean }>({});
   const [progress, setProgress] = useState<Record<ConsultationMode, ConsultationPhase>>({water:'editing', rotations:'editing'});
   const updateProgress = useCallback((mode: ConsultationMode, phase: ConsultationPhase) => {
@@ -52,21 +43,6 @@ function ParcelReport({ point, parcel, area, view, demo, savedParcelId }: {
   const report = useRef<HTMLElement>(null);
   const { latitude, longitude } = point;
   const selectedParcel = useMemo(() => ({ latitude, longitude, name: "", areaHa: area }), [latitude, longitude, area]);
-
-  useEffect(() => {
-    const request = new AbortController();
-    const params = new URLSearchParams(view);
-    params.set("lat", String(latitude));
-    params.set("lon", String(longitude));
-    fetch(`/api/territory?${params}`, { signal: AbortSignal.any([request.signal, AbortSignal.timeout(9000)]) })
-      .then(async response => {
-        if (!response.ok) throw new Error("GAMC");
-        const result: Territory = await response.json();
-        if (!request.signal.aborted) setTerritory(result);
-      })
-      .catch(() => { if (!request.signal.aborted) setTerritory(null); });
-    return () => request.abort();
-  }, [latitude, longitude, view, attempt]);
 
   function printReport() {
     const closed = report.current?.querySelectorAll<HTMLDetailsElement>("details:not([open])");
@@ -93,6 +69,7 @@ function ParcelReport({ point, parcel, area, view, demo, savedParcelId }: {
         </section>
       </div>
     </header>
+    <ParcelClimate point={point} />
     <section aria-label="Decisiones para esta parcela" className="panel consulta-seccion grid gap-3">
       {demo&&<div className="mb-1 rounded-2xl bg-leaf/60 p-4">
         <p className="text-lg font-bold">Terreno de práctica: {demo==='tunari'?'Tirani':'La Maica'}</p>
@@ -121,20 +98,6 @@ function ParcelReport({ point, parcel, area, view, demo, savedParcelId }: {
         )}
       </div>
     </section>
-    <details className="grid min-w-0 gap-3 rounded-3xl bg-white/95 p-4 sm:p-5">
-      <summary className="cursor-pointer text-lg font-bold">Ver clima y cultivos de este lugar</summary>
-      <p className="my-3 text-sm text-muted">Consulta los promedios históricos y las opciones de cultivo cuando los necesites.</p>
-      <ParcelClimate point={point} territory={<details className="consulta-detalle consulta-detalle-territorio">
-      <summary><Map aria-hidden="true"/> <span>Contexto territorial<small>Límites, periurbanos y drenaje</small></span> <ChevronRight aria-hidden="true"/></summary>
-      <TerritorySummary reference={getReferenceCase(latitude, longitude)} result={territory ?? undefined}>
-        {territory === undefined && <p role="status">Consultando las capas municipales…</p>}
-        {territory === null && <p role="status">Las capas municipales no están disponibles en este momento.</p>}
-        {territory !== undefined && <Button type="button" variant="secondary" className="consulta-no-imprimir justify-self-start" onClick={() => {
-          setTerritory(undefined); setAttempt(n => n + 1);
-        }}>Actualizar datos municipales</Button>}
-      </TerritorySummary>
-    </details>}/>
-    </details>
     <div className="consulta-no-imprimir justify-self-end">
       <Button type="button" variant="secondary" className="consulta-imprimir" onClick={printReport}><Printer size={18} aria-hidden="true"/> Imprimir o guardar PDF</Button>
     </div>

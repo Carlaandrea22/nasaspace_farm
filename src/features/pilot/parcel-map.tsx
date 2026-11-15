@@ -479,6 +479,7 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
             {Object.entries(layerNames).map(([key, name]) => <option key={key} value={key}>{name}</option>)}
           </NativeSelect>
         </div>}
+        {overview && <Button type="button" onClick={locate} disabled={locating}><LocateFixed size={17} aria-hidden="true" /> Usar mi ubicación</Button>}
         <div className="grid gap-2">
           {drawing ? (
             <div className="flex flex-wrap gap-2">
@@ -487,12 +488,13 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
             </div>
           ) : <Button type="button" variant="secondary" onClick={() => { setVertices([]); setDrawError(""); setDrawing(true); }}><Crop size={17} aria-hidden="true" /> {outline?.length ? "Volver a dibujar" : "Dibujar parcela"}</Button>}
         </div>
-        {(drawing || Boolean(outline?.length)) && <div className="grid gap-1.5 text-sm text-muted sm:col-span-2">
+        {(drawing || Boolean(outline?.length)) && <div className="col-span-full grid gap-1.5 text-sm text-muted">
           <p role="status">{drawing ? `${vertices.length} de ${outlineCorners} puntos marcados` : "4 de 4 puntos · Contorno cerrado"}</p>
           <progress className="map-outline-progress" aria-label="Puntos del contorno" value={drawing ? vertices.length : outlineCorners} max={outlineCorners} />
           {drawing && <p>Toca las esquinas en orden.</p>}
         </div>}
-        {drawError && <p role="alert" className="text-sm text-red-800 sm:col-span-2">{drawError}</p>}
+        {drawError && <p role="alert" className="col-span-full text-sm text-red-800">{drawError}</p>}
+        {overview && locationStatus && <p className="text-sm text-muted" role="status">{locationStatus}</p>}
       </div>
       <div className="min-w-0">
         <div className="isolate overflow-hidden rounded-[22px]">
@@ -524,11 +526,11 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
             const center = mapRef.current?.getCenter();
             if (center) onSelect({ latitude: center.lat, longitude: center.lng });
           }}><Crosshair size={17} aria-hidden="true" /> Marcar centro</Button>
-          <Button type="button" variant="secondary" onClick={locate} disabled={locating}><LocateFixed size={17} aria-hidden="true" /> Usar mi ubicación</Button>
+          {!overview && <Button type="button" variant="secondary" onClick={locate} disabled={locating}><LocateFixed size={17} aria-hidden="true" /> Usar mi ubicación</Button>}
           <Button type="button" variant="secondary" onClick={() => visitReference("tunari")}>Tirani</Button>
           <Button type="button" variant="secondary" onClick={() => visitReference("la-maica")}>La Maica</Button>
         </div>
-        {locationStatus && <p className="mt-2 text-sm text-muted" role="status">{locationStatus}</p>}
+        {!overview && locationStatus && <p className="mt-2 text-sm text-muted" role="status">{locationStatus}</p>}
         {districtError && showDistricts && <p role="status" className="mt-2 text-sm text-muted">No se pudieron cargar los distritos de referencia.</p>}
         {satellite && (!online || satelliteError) && <p role="status" className="mt-2 text-sm text-muted">Imágenes satelitales no disponibles. El mapa local sigue activo.</p>}
         {layer && <p className="mt-1 text-sm text-muted"><a className="underline" target="_blank" rel="noreferrer" href={`/api/territory?operation=legend&layer=${layer}`}>Abrir leyenda de {layerNames[layer]}</a></p>}

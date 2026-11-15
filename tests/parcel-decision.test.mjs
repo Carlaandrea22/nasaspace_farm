@@ -73,6 +73,15 @@ test('los nuevos cultivos producen balances finitos y conservan agua en el metro
    assert.ok(result,profile.name);assert.ok(result.demandMm>0,profile.name);
    for(const row of result.rows)assert.ok(Math.abs(row.storageBeforeMm+row.rainMm+row.irrigationMm-row.lossMm-row.actualEtMm-row.storageMm)<1e-8,profile.name);
    assert.ok(profile.rootM<=1&&profile.rootM>0,profile.name);
+   const start = `2024-${String(profile.seedMonths[0] ?? 3).padStart(2,'0')}-01`;
+   const duration = profile.duration || 90;
+   const [historical] = compare({
+     ...base, testTurnId:'', priority:'Usar menos agua',
+     days: Array.from({length:duration},(_,i)=>({date:addDays(start,i),rain:2,et0:4,tmin:10})),
+     rotations:[{id:profile.name,restrictions:[],seasons:[{crop:profile,start,end:addDays(start,duration-1)}]}],
+   },0);
+   assert.equal(historical.excluded,false,profile.name);
+   assert.ok(Number.isFinite(historical.supplementalMm),profile.name);
  }
  // FAO-56 Table 12: potatoes .5/1.15/.75; alfalfa .4/1.2/1.15 per cutting period.
  assert.deepEqual(waterCrops.Papa.kc,[.5,1.15,.75]);

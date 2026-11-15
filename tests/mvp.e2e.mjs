@@ -40,6 +40,32 @@ test("la portada muestra la marca Yaku", async () => {
   }
 });
 
+test("la portada ubica los controles de parcela a la izquierda del mapa", async () => {
+  const browser = await chromium.launch(install ? { channel: install } : {});
+  try {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+    await page.goto(origin);
+    const map = page.getByRole("region", { name: "Mapa de Cochabamba" });
+    await map.waitFor();
+    const controls = [
+      page.getByRole("combobox", { name: "Selecciona tu distrito" }),
+      page.getByRole("button", { name: "Usar mi ubicación" }),
+      page.getByRole("button", { name: "Dibujar parcela" }),
+    ];
+    const frame = await map.boundingBox();
+    let previous = null;
+    for (const control of controls) {
+      const box = await control.boundingBox();
+      assert.ok(box && box.x + box.width <= frame.x, "El control debe quedar a la izquierda del mapa");
+      assert.ok(!previous || box.y >= previous.y + previous.height);
+      previous = box;
+    }
+    assert.equal(await page.getByLabel("Buscar dirección o lugar").count(), 0);
+  } finally {
+    await browser.close();
+  }
+});
+
 test("el mapa acerca con la rueda y vuelve a la vista límite de Cochabamba", async () => {
   const browser = await chromium.launch(install ? { channel: install } : {});
   try {
@@ -234,10 +260,8 @@ test("el invitado guarda su parcela, compara escenarios y reabre el MVP sin red"
     await page.getByLabel("Latitud").fill("-17.34161");
     await page.getByLabel("Longitud").fill("-66.15458");
     const offlineReport = await openReport(page);
-    await offlineReport.getByText("Ver clima y cultivos de este lugar", { exact: true }).click();
-    await offlineReport.locator("summary").filter({ hasText: "Contexto territorial" }).click();
-    await offlineReport.getByText("Referencia del piloto:", { exact: false }).waitFor();
-    await offlineReport.getByText("Las capas municipales no están disponibles en este momento.").waitFor();
+    await offlineReport.getByRole("heading", { name: "Clima de la parcela" }).waitFor();
+    await offlineReport.getByText(/Historial no disponible para este punto/).waitFor();
     await offlineReport.close();
     await save();
     await page.goto(origin + "/la-maica/comparar");
@@ -333,18 +357,7 @@ test("el historial cambia con el punto y recupera la última consulta sin red", 
     page.setDefaultTimeout(9000);
     const queriedAt = "2026-11-28T16:00:00.000Z";
     await page.clock.setFixedTime(new Date(queriedAt));
-    const today = cityDay.format(new Date(queriedAt));
-    const month = today.slice(0, 7);
-    const startMonth = Number(month.slice(5)) - 1;
     const consultations = [];
-    await context.route("**/api/weather?*", (route) => route.fulfill({ json: {
-      today, queriedAt, recent: [], days: Array.from({ length: 14 }, (_, index) => ({
-        date: dateShift(today, index), rain: 1, et0: 3, minimum: index === 3 ? 1 : 8, maximum: 25,
-      })),
-    } }));
-    await context.route("**/api/enso", (route) => route.fulfill({ json: { issued: month, seasons: [
-      { code: "DJF", center: month, nina: 5, neutral: 10, nino: 85 },
-    ] } }));
     await context.route("**/api/climate?*", (route) => {
       const params = new URL(route.request().url()).searchParams;
       const latitude = Number(params.get("lat"));
@@ -353,21 +366,6 @@ test("el historial cambia con el punto y recupera la última consulta sin red", 
       return route.fulfill({ json: {
         queriedAt, from: "2016-01-01", to: "2025-12-31", annualRain: rain, rainYears: 10,
         months: Array.from({ length: 12 }, (_, index) => ({ month: index + 1, rain: 45, temperature: 18, minimum: 8, maximum: 27, humidity: 52 })),
-        crops: Array.from({ length: 12 }, (_, index) => [
-          { code: "1232", name: "Cebada", species: "Hordeum vulgare", use: "forraje", days: 165, cycleRange: [90, 240], temperature: [2, 15, 20, 40], assessment: { category: index === startMonth ? "recommended" : "conditional", optimal: 300 + index, outside: index === startMonth ? 0 : 4, observations: 660 }, optimalRain: true, optimalPh: [6.5, 7.5], samples: 4, favorableCycles: index === startMonth ? 3 : 1, conditionalCycles: index === startMonth ? 1 : 2 },
-          { code: "2146", name: "Haba", species: "Vicia faba", use: "consumo", days: 125, cycleRange: [100, 150], temperature: [5, 18, 28, 32], assessment: { category: "recommended", optimal: 475, outside: 0, observations: 500 }, optimalRain: false, optimalPh: [6, 7], samples: 4, favorableCycles: 4, conditionalCycles: 0 },
-        ]),
-      } });
-    });
-    await context.route("**/api/territory?*", (route) => {
-      const laMaica = new URL(route.request().url()).searchParams.get("lat") === "-17.42442";
-      const district = laMaica ? "9" : "13";
-      const commune = laMaica ? "Itocta" : "Tunari";
-      const emptyLayer = { status: "no-match", matches: [] };
-      return route.fulfill({ json: {
-        source: "GAMC · Proyecto 04", queriedAt,
-        district: { status: "unique", matches: [{ district, commune, label: `D${district} · ${commune}` }] },
-        periurban: emptyLayer, drainage: emptyLayer,
       } });
     });
     await page.goto(origin);
@@ -376,43 +374,19 @@ test("el historial cambia con el punto y recupera la última consulta sin red", 
     assert.deepEqual(consultations, []);
     const panel = await openReport(page);
     await panel.getByRole("heading", { name: "¿Qué puedes cultivar aquí?" }).waitFor();
-    await panel.getByText("Ver clima y cultivos de este lugar", { exact: true }).click();
-    await panel.getByText("480 mm", { exact: true }).waitFor();
-    await panel.locator("summary").filter({ hasText: "Contexto territorial" }).click();
-    await panel.getByRole("region", { name: "Contexto territorial" }).getByText("D9 · Itocta", { exact: true }).waitFor();
-    await panel.locator("summary").filter({ hasText: "Panorama estacional" }).click();
-    await panel.getByText(/El Niño · 85%/).waitFor();
-    assert.equal(await panel.getByText(/El Niño · 85%/).count(), 1);
-    await panel.getByText("90–240 días estimados entre siembra y cosecha", { exact: false }).waitFor();
-    const barley = panel.getByRole("listitem").filter({ has: panel.getByRole("heading", { name: "Cebada", exact: true }) });
-    await barley.locator("summary").click();
-    await barley.getByText(/3 de 4 ciclos históricos favorables/).waitFor();
-    const dateControl = panel.getByLabel("¿Cuándo quieres sembrar?");
-    assert.equal(await dateControl.getAttribute("min"), today);
-    assert.equal(await dateControl.getAttribute("max"), dateShift(today, 13));
-    await panel.getByText(/Temperatura compatible del 28 nov.* al 30 nov/).first().waitFor();
-    await dateControl.fill(dateShift(today, -1));
-    await panel.getByText(/Elige una fecha entre/).waitFor();
-    assert.equal(await panel.getByRole("heading", { name: "Cebada" }).count(), 0);
-    await dateControl.fill(dateShift(today, 14));
-    await panel.getByText(/Elige una fecha entre/).waitFor();
-    await dateControl.fill("2026-12-01");
-    await panel.getByLabel("Destino de la cosecha").selectOption("forraje");
-    await panel.getByText(/Ninguna opción para el destino elegido/).waitFor();
-    await panel.getByLabel("pH medido (opcional)").fill("6,9");
-    if (!await barley.locator("details").evaluate((element) => element.open)) await barley.locator("summary").click();
-    await barley.getByText(/1 de 4 ciclos históricos favorables/).waitFor();
-    await barley.getByText(/pH medido en el rango óptimo/).waitFor();
+    const climate = panel.locator("header.consulta-portada + #clima-parcela");
+    await climate.getByText("480 mm", { exact: true }).waitFor();
+    assert.equal(await panel.getByText("Ver clima y cultivos de este lugar", { exact: true }).count(), 0);
+    assert.equal(await panel.locator("#cultivos-parcela").count(), 0);
+    assert.equal(await panel.getByText("Contexto territorial", { exact: true }).count(), 0);
+    assert.ok(await panel.getByRole("button", { name: "Quiero planificar qué sembrar después" }).isVisible());
     await panel.evaluate(() => { window.print = () => { document.body.dataset.printed = "true"; }; });
     await panel.getByRole("button", { name: "Imprimir o guardar PDF" }).click();
     assert.equal(await panel.locator("body").getAttribute("data-printed"), "true");
     await panel.close();
     await selectReference(page, "Tirani");
     const tirani = await openReport(page);
-    await tirani.getByText("Ver clima y cultivos de este lugar", { exact: true }).click();
     await tirani.getByText("515 mm", { exact: true }).waitFor();
-    await tirani.locator("summary").filter({ hasText: "Contexto territorial" }).click();
-    await tirani.getByRole("region", { name: "Contexto territorial" }).getByText("D13 · Tunari", { exact: true }).waitFor();
     assert.equal(await tirani.getByText("480 mm", { exact: true }).count(), 0);
     const tiraniUrl = tirani.url();
     await tirani.close();
@@ -440,7 +414,6 @@ test("el historial cambia con el punto y recupera la última consulta sin red", 
     assert.equal(await page.getByRole("link", { name: "Consultar ubicación", exact: true }).count(), 0);
     const cached = await context.newPage();
     await cached.goto(tiraniUrl);
-    await cached.getByText("Ver clima y cultivos de este lugar", { exact: true }).click();
     await cached.getByText("515 mm", { exact: true }).waitFor();
     await cached.getByText(/NASA POWER.*Copia guardada/i).waitFor();
   } finally {

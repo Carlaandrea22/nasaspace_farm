@@ -9,6 +9,25 @@ SPECIES = {
     "481": ("Avena forrajera", "forraje"),
     "1232": ("Cebada forrajera", "forraje"),
     "2146": ("Haba", "consumo"),
+    "1971": ("Papa", "consumo"),
+    "871": ("Zanahoria", "consumo"),
+    "551": ("Cebolla (cabeza)", "consumo"),
+    "1313": ("Lechuga", "consumo"),
+    "1721": ("Arveja (verde)", "consumo"),
+    "238663": ("Maíz en grano", "consumo"),
+    "2114": ("Trigo", "consumo"),
+}
+
+# Growing-period examples from FAO-56, table 11. These are scenario lengths,
+# and the table's planting months and locations are not transferred to Cochabamba.
+PLANTING_DAYS = {
+    "1971": 130,  # Potato, semi-arid climate.
+    "871": 100,  # Carrot, arid climate.
+    "551": 150,  # Dry bulb onion, Mediterranean.
+    "1313": 75,  # Lettuce, Mediterranean.
+    "1721": 90,  # Peas, Europe.
+    "238663": 140,  # Grain maize, arid climate.
+    "2114": 135,  # Barley/oats/wheat, 35–45° latitude.
 }
 
 with (ROOT / "DatosPlantas/EcoCrop_DB.csv").open(encoding="latin-1", newline="") as stream:
@@ -28,6 +47,11 @@ for code, (name, use) in SPECIES.items():
         "days": days, "cycleRange": [minimum_days, maximum_days], "temperature": temperature, "rainfall": rainfall,
         "optimalPh": [float(row[key]) for key in ("PHOPMN", "PHOPMX")],
     })
+    if code in PLANTING_DAYS:
+        planting_days = PLANTING_DAYS[code]
+        if not minimum_days <= planting_days <= maximum_days:
+            raise ValueError(f"Ciclo de referencia fuera del rango EcoCrop para {name}")
+        catalogue[-1]["plantingDays"] = planting_days
 
 (ROOT / "src/data/ecocrop.json").write_text(
     json.dumps(catalogue, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",

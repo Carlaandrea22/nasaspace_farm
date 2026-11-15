@@ -25,7 +25,7 @@ const cropWater = z.object({
   secondCrop: text, secondPlanting: text, secondHarvest: text,
   priority: text, waterSource: text, turnDate: text,
   intervalDays: z.number().int().positive().nullable(), volumeM3: positive,
-  currentCrop: text.optional(), currentPlanting: text.optional(), harvestUse: text.optional(),
+  currentCrop: text.optional(), currentPlanting: text.optional(), currentHarvest: text.optional(), harvestUse: text.optional(),
   turnStatus: text.optional(), flowLs: positive.optional(), durationMinutes: positive.optional(),
   scenarioVolumeM3: positive.optional(), parcelKey: parcelKey.optional(),
 });

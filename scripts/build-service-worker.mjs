@@ -18,10 +18,10 @@ const browserAssets = [
   "/images/carla-cultivos.jpg",
   "/images/parcela-paisaje.webp",
   "/images/parcela-tractor.webp",
-  "/images/informe/avena.webp",
-  "/images/informe/cebada.webp",
-  "/images/informe/haba.webp",
-  "/images/informe/maiz.webp",
+  ...(await readdir("public/images/informe"))
+    .filter((name) => name.endsWith(".webp"))
+    .sort()
+    .map((name) => `/images/informe/${name}`),
   "/images/informe/creditos.html",
   "/maps/cochabamba-distritos.geojson",
   "/pilots/la-maica/contexto-osm.geojson",

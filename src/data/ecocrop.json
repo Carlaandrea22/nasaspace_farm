@@ -106,5 +106,201 @@
       6.0,
       7.0
     ]
+  },
+  {
+    "code": "1971",
+    "name": "Papa",
+    "species": "Solanum tuberosum",
+    "use": "consumo",
+    "days": 125,
+    "cycleRange": [
+      90,
+      160
+    ],
+    "temperature": [
+      7.0,
+      15.0,
+      25.0,
+      30.0
+    ],
+    "rainfall": [
+      250.0,
+      500.0,
+      800.0,
+      2000.0
+    ],
+    "optimalPh": [
+      5.0,
+      6.2
+    ],
+    "plantingDays": 130
+  },
+  {
+    "code": "871",
+    "name": "Zanahoria",
+    "species": "Daucus carota",
+    "use": "consumo",
+    "days": 95,
+    "cycleRange": [
+      40,
+      150
+    ],
+    "temperature": [
+      3.0,
+      15.0,
+      24.0,
+      30.0
+    ],
+    "rainfall": [
+      400.0,
+      600.0,
+      1200.0,
+      4000.0
+    ],
+    "optimalPh": [
+      5.8,
+      6.8
+    ],
+    "plantingDays": 100
+  },
+  {
+    "code": "551",
+    "name": "Cebolla (cabeza)",
+    "species": "Allium cepa var. cepa",
+    "use": "consumo",
+    "days": 130,
+    "cycleRange": [
+      85,
+      175
+    ],
+    "temperature": [
+      4.0,
+      12.0,
+      25.0,
+      30.0
+    ],
+    "rainfall": [
+      300.0,
+      350.0,
+      600.0,
+      2800.0
+    ],
+    "optimalPh": [
+      6.0,
+      7.0
+    ],
+    "plantingDays": 150
+  },
+  {
+    "code": "1313",
+    "name": "Lechuga",
+    "species": "Lactuca sativa var. capitata",
+    "use": "consumo",
+    "days": 60,
+    "cycleRange": [
+      35,
+      85
+    ],
+    "temperature": [
+      5.0,
+      12.0,
+      21.0,
+      30.0
+    ],
+    "rainfall": [
+      900.0,
+      1100.0,
+      1400.0,
+      4100.0
+    ],
+    "optimalPh": [
+      6.0,
+      7.0
+    ],
+    "plantingDays": 75
+  },
+  {
+    "code": "1721",
+    "name": "Arveja (verde)",
+    "species": "Pisum sativum",
+    "use": "consumo",
+    "days": 100,
+    "cycleRange": [
+      60,
+      140
+    ],
+    "temperature": [
+      4.0,
+      10.0,
+      24.0,
+      30.0
+    ],
+    "rainfall": [
+      350.0,
+      800.0,
+      1200.0,
+      2500.0
+    ],
+    "optimalPh": [
+      5.5,
+      7.0
+    ],
+    "plantingDays": 90
+  },
+  {
+    "code": "238663",
+    "name": "Maíz en grano",
+    "species": "Zea mays ssp. mays",
+    "use": "consumo",
+    "days": 215,
+    "cycleRange": [
+      65,
+      365
+    ],
+    "temperature": [
+      10.0,
+      18.0,
+      33.0,
+      47.0
+    ],
+    "rainfall": [
+      400.0,
+      600.0,
+      1200.0,
+      1800.0
+    ],
+    "optimalPh": [
+      5.0,
+      7.0
+    ],
+    "plantingDays": 140
+  },
+  {
+    "code": "2114",
+    "name": "Trigo",
+    "species": "Triticum aestivum",
+    "use": "consumo",
+    "days": 170,
+    "cycleRange": [
+      90,
+      250
+    ],
+    "temperature": [
+      5.0,
+      15.0,
+      23.0,
+      27.0
+    ],
+    "rainfall": [
+      300.0,
+      750.0,
+      900.0,
+      1600.0
+    ],
+    "optimalPh": [
+      6.0,
+      7.0
+    ],
+    "plantingDays": 135
   }
 ]

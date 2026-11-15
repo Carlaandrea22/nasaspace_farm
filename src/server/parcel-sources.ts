@@ -13,10 +13,13 @@ async function json(url:URL, seconds:number) {
 
 export async function readParcelSoil(point:Coordinates) {
   const queriedAt=new Date().toISOString();
-  // An exact, dated extraction is already available for the demo point. Avoid depending
-  // on the beta REST service for this static soil property; do not extend it to other parcels.
-  const exactSaved=pilotSoils.samples.find(s=>distanceMeters(point,s.point)<1);
-  if(exactSaved)return {soil:{...exactSaved,distanceM:0},soilStatus:'available' as const};
+  // Use the verified pilot extraction within its existing 100 m reference radius.
+  for (const sample of pilotSoils.samples) {
+    const distance = distanceMeters(point, sample.point);
+    if (distance <= 100) {
+      return {soil:{...sample,distanceM:distance < 1 ? 0 : Math.round(distance)},soilStatus:'available' as const};
+    }
+  }
   async function sample(p:Coordinates) {
     const url=new URL('https://rest.isric.org/soilgrids/v2.0/properties/query');
     url.searchParams.set('lat',p.latitude.toFixed(5));url.searchParams.set('lon',p.longitude.toFixed(5));
@@ -28,9 +31,7 @@ export async function readParcelSoil(point:Coordinates) {
   }
   let soilStatus:SoilStatus='unavailable';
   // Never use La Maica's profile as the default for other points.
-  try { const exact=await sample(point);if(exact.soil)return exact;soilStatus=exact.soilStatus; }catch { /* Try the reviewed nearby extraction only within its small neighborhood. */ }
-  const verified=pilotSoils.samples.find(s=>distanceMeters(point,s.point)<=100);
-  if(verified)return {soil:{...verified,distanceM:Math.round(distanceMeters(point,verified.point))},soilStatus:'available' as const};
+  try { const exact=await sample(point);if(exact.soil)return exact;soilStatus=exact.soilStatus; }catch { /* Try the regional extraction within its reference radius. */ }
   if(distanceMeters(point,reference.meta.soilPoint)<=350) return {soil:{
     profile:reference.soil,point:reference.meta.soilPoint,distanceM:Math.round(distanceMeters(point,reference.meta.soilPoint)),
     source:'SoilGrids · extracción regional revisada',url:reference.meta.soilSource,queriedAt:reference.meta.fetchedAt,
@@ -49,10 +50,10 @@ export async function readModeledMoisture(point:Coordinates) {
 
 export async function readBalanceHistory(point:Coordinates) {
   const lastYear=new Date().getUTCFullYear()-1;
-  const from=`${lastYear-1}-01-01`,to=`${lastYear}-12-31`;
+  const from=`${lastYear-2}-01-01`,to=`${lastYear}-12-31`;
   const url=new URL('https://power.larc.nasa.gov/api/temporal/daily/point');
   url.search=new URLSearchParams({latitude:point.latitude.toFixed(3),longitude:point.longitude.toFixed(3),community:'AG',
-    parameters:'T2M_MAX,T2M_MIN,RH2M,WS2M,ALLSKY_SFC_SW_DWN,PRECTOTCORR,IMERG_PRECTOT',
+    parameters:'T2M,T2M_MAX,T2M_MIN,RH2M,WS2M,ALLSKY_SFC_SW_DWN,PRECTOTCORR,IMERG_PRECTOT',
     start:from.replaceAll('-',''),end:to.replaceAll('-',''),format:'JSON','time-standard':'UTC'}).toString();
   const result=parseBalanceHistory(await json(url,86400*7),from,to);
   return {...result,from,to,url:url.toString(),queriedAt:new Date().toISOString(),point,smap:readRegionalSmap(point)};
