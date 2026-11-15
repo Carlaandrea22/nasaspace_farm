@@ -25,16 +25,19 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <a className="skip-link" href="#contenido">Ir al contenido</a>
         <header className="site-header">
           <div className="header-inner">
-            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-            <a className="brand" href="/" aria-label="Yaku, inicio">
-              <Image className="brand-mark" src="/icons/yaku-mark-192.png" alt="" width={44} height={44} loading="eager" unoptimized />
-              <span><strong>Yaku</strong><small>Cochabamba</small></span>
-            </a>
+            <div className="header-brand">
+              <AppNavigation placement="desktop" />
+              {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+              <a className="brand" href="/" aria-label="Yaku, inicio">
+                <Image className="brand-mark" src="/icons/yaku-mark-192.png" alt="" width={44} height={44} loading="eager" unoptimized />
+                <span><strong>Yaku</strong><small>Cochabamba</small></span>
+              </a>
+            </div>
             <AccountDialog />
           </div>
         </header>
         <div className="app-frame">
-          <AppNavigation />
+          <AppNavigation placement="mobile" />
           <main id="contenido" tabIndex={-1}>{children}</main>
         </div>
         <ServiceWorkerRegistration />

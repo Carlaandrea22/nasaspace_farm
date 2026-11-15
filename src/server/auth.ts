@@ -79,6 +79,19 @@ async function initializeAuth() {
     END $$;
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS field_shift_inspection_deliveries (
+      user_id text NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+      parcel_id text NOT NULL,
+      local_day date NOT NULL,
+      recipient text NOT NULL CHECK (recipient IN ('regantes', 'gamc')),
+      status text NOT NULL CHECK (status IN ('sending', 'failed', 'accepted')),
+      attempt_id uuid NOT NULL,
+      attempted_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (user_id, parcel_id, local_day, recipient)
+    );
+  `);
+
   const password = process.env.FIELD_SHIFT_DEMO_PASSWORD;
   if (password && process.env.FIELD_SHIFT_DEMO_ENABLED === "true") {
     const demoUsername = "prueba";

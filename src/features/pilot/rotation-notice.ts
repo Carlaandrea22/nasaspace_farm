@@ -1,5 +1,6 @@
 import type { Result } from "../../domain/water-balance/model";
 import { noticeNumber } from "./irrigation-notice";
+import type { PlantingAlternative } from "./parcel-rotations";
 
 export const rotationPhotos: Partial<Record<string, string>> = {
   "Maíz forrajero": "/images/informe/maiz.webp",
@@ -22,8 +23,6 @@ export function rotationMetrics(result: Result) {
     { label: "Días con suelo cubierto", value: noticeNumber(result.coverageDays) },
   ];
 }
-
-export type PlantingAlternative = { start: string; end: string; result: Result; estimatedCalendar: boolean };
 
 type RotationNotice = {
   title: string;
@@ -64,7 +63,7 @@ export async function downloadRotationNotice(data: RotationNotice) {
   y = write("Opciones para después de la cosecha", 16, y, 178, 12, true) + 2;
 
   const photos = await Promise.all(data.alternatives.map(async ({ result }) => {
-    const photo = rotationPhotos[result.rotation.seasons[0].crop.name];
+    const photo = rotationPhotos[result.rotation.seasons.at(-1)!.crop.name];
     if (!photo) return null;
     try {
       const response = await fetch(photo);
@@ -73,8 +72,8 @@ export async function downloadRotationNotice(data: RotationNotice) {
       return null;
     }
   }));
-  data.alternatives.forEach(({result, start, end, estimatedCalendar}, index) => {
-    const crop = result.rotation.seasons[0].crop.name;
+  data.alternatives.forEach(({result, start, end, estimatedCalendar, habitual}, index) => {
+    const crop = result.rotation.seasons.at(-1)!.crop.name;
     const image = photos[index];
     box(12, y, 186, 33, result === data.selected ? "#dfedce" : "#f0f4eb");
     let x = 17;
@@ -88,7 +87,7 @@ export async function downloadRotationNotice(data: RotationNotice) {
         // The text remains available if a crop photo cannot be decoded.
       }
     }
-    write(`${crop}${result === data.selected ? " · Primera opción" : ""}`, x, y + 8, 193 - x, 12, true);
+    write(`${crop}${habitual ? " · Habitual" : ""}${result === data.selected ? " · Primera opción" : ""}`, x, y + 8, 193 - x, 12, true);
     let detail = write(`Siembra estimada: ${start} · Cosecha aproximada: ${end}`, x, y + 15, 193 - x);
     if (estimatedCalendar) detail = write("Calendario local por confirmar (FAO-56 y EcoCrop)", x, detail, 193 - x, 9);
     write(rotationMetrics(result).map(({ label, value }) => `${label}: ${value}`).join(" · "), x, detail + 1, 193 - x, 9);

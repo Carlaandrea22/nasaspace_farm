@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { waterCrops } from "../features/pilot/water-crops";
 
 const text = z.string().max(160);
 const positive = z.number().positive().nullable();
@@ -25,12 +26,25 @@ const cropWater = z.object({
   secondCrop: text, secondPlanting: text, secondHarvest: text,
   priority: text, waterSource: text, turnDate: text,
   intervalDays: z.number().int().positive().nullable(), volumeM3: positive,
+  turnDepthMm: z.number().positive().max(500).nullable().optional(),
   currentCrop: text.optional(), currentPlanting: text.optional(), currentHarvest: text.optional(), harvestUse: text.optional(),
   turnStatus: text.optional(), flowLs: positive.optional(), durationMinutes: positive.optional(),
   scenarioVolumeM3: positive.optional(), parcelKey: parcelKey.optional(),
 });
 
 export const draftPatchSchema = z.object({ parcel: parcel.optional(), cropWater: cropWater.optional() });
+export const reportWaterPatchSchema = z.strictObject({
+  reportWater: z.object({
+    location: coordinates,
+    crop: z.string().refine((name) => Object.hasOwn(waterCrops, name)),
+    planting: z.iso.date(),
+    harvest: z.iso.date(),
+    turn: z.union([z.iso.date(), z.literal("")]),
+    depthMm: z.number().positive().max(500).nullable(),
+  }).refine(({ planting, harvest, turn, depthMm }) =>
+    planting < harvest && (turn ? depthMm !== null && turn <= harvest : depthMm === null)),
+  newParcel: z.object({ name: z.string().trim().min(1).max(100), areaHa: positive }).optional(),
+});
 export const fullDraftSchema = draftPatchSchema.extend({
   id: z.uuid(),
   version: z.literal(1),

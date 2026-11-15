@@ -7,7 +7,7 @@ Verificación del 15 de noviembre de 2026. La consulta pública se abre desde el
 1. Seleccionar un punto o dibujar los cuatro vértices del terreno. Abrir su informe.
 2. **Ya tengo un cultivo y quiero revisar el agua:** indicar cultivo y fecha de siembra si no se conocen. El terreno se hereda del mapa. La consulta incluye doce opciones agrupadas; los cultivos nuevos piden cosecha prevista y la alfalfa establecida pide último y próximo corte. Se pueden ajustar riegos, humedad y eficiencias; todos los supuestos se muestran en el resultado.
 3. Leer lluvia prevista, demanda y días con posible falta de agua. Comparar el turno original con cinco días de retraso. Descargar la ficha para coordinar con regantes.
-4. **Quiero planificar qué sembrar después:** reutiliza el cultivo y la siembra declarados en agua si pertenecen al catálogo de cuatro cultivos con calendario del piloto. Si no, explica la cobertura y permite explorar un ejemplo sin sustituir silenciosamente el cultivo. Pedir la rotación habitual y la prioridad; mostrar habitual más dos alternativas bajo el mismo suelo, periodo y riego.
+4. **Quiero planificar qué sembrar después:** reutiliza el cultivo y las fechas declaradas en agua. El productor indica qué siembra habitualmente después, su prioridad y el destino de la cosecha. La comparación usa dos campañas por rotación, con el mismo periodo histórico, suelo y escenario sin riego. Se pueden ingresar costos de semilla en Bs/ha y comparar la diferencia con la habitual.
 5. Consultar clima, aptitud de cultivos, panorama estacional y capas municipales. **Imprimir o guardar PDF** incluye ambos módulos visitados, aunque uno esté plegado.
 
 Para una demostración preparada, desde **Encuentra tu parcela** usar **Tirani** o **La Maica** junto a **Marcar centro**, dibujar la parcela y pulsar **Consultar esta parcela**. Los accesos solo mueven el mapa; los datos se consultan para la selección del usuario. No se precargan datos de manejo: la persona elige su consulta, introduce cultivo y fechas, y solicita el cálculo. El suelo de Tirani se lee de su extracción oficial guardada, conservando fecha y procedencia; clima y pronóstico siguen sus fuentes. Hay un segundo ejemplo de La Maica con referencia cercana de suelo. [Guion completo de la demo](demo-desde-el-mapa.md).
@@ -17,8 +17,8 @@ Para una demostración preparada, desde **Encuentra tu parcela** usar **Tirani**
 | Objetivo local | Implementación | Alcance real |
 |---|---|---|
 | Humedad superficial y radicular SMAP | Subconjunto público NASA POWER SMAP L4; 20 celdas regionales | Hasta 2026-11-10. Superficie 0–5 cm y raíces 0–100 cm. Grilla de unos 9 km; producto marcado `reviewing` por el proveedor. No es medición dentro de la parcela. |
-| GPM IMERG casi en tiempo real | Importación Early de Luis, 144 archivos, tres días locales completos 2026-11-11 a 13 | Una celda de 0,1°, centro −17,45 / −66,15. Se usa únicamente dentro de sus límites y en sus fechas. Fuera de esa cobertura, lluvia modelada identificada; nunca se extiende a todo el municipio. |
-| Radiación y temperatura NASA POWER | Consulta por coordenada, dos años completos para balance histórico | Para esta entrega, 2024–2025 UTC. Radiación, viento a 2 m, humedad, temperaturas y elevación de grilla alimentan ET₀ FAO-56. IMERG Final vía POWER tiene prioridad en la lluvia histórica. |
+| GPM IMERG casi en tiempo real | Corte Early V07C validado con 144 gránulos, tres días locales completos 2026-11-11 a 13 | Dos celdas de 0,1°, La Maica (−17,45 / −66,15) y Tirani (−17,35 / −66,15). Fuera de las celdas o fechas verificadas se identifica la lluvia modelada. |
+| Radiación y temperatura NASA POWER | Consulta por coordenada, tres años completos para balance histórico | Para esta entrega, 2023–2025 UTC. Radiación, viento a 2 m, humedad, temperaturas y elevación de grilla alimentan ET₀ FAO-56. IMERG Final vía POWER tiene prioridad en la lluvia histórica. |
 | Clima histórico y aptitud | Módulo existente POWER + EcoCrop | Diez años completos, 2016–2025, tiempo solar local. Evaluación térmica; no garantiza cosecha ni sustituye la comparación hídrica. |
 | Pronóstico a 7–14 días | Open-Meteo por coordenada, lluvia, ET₀, mínimas y máximas | Pronóstico complementario, no observación ni pronóstico de NASA. Un hueco invalida el balance continuo. |
 | Suelo | SoilGrids ISRIC: arena, arcilla, agua a 33 y 1500 kPa, cinco horizontes hasta 1 m | Predicción de 250 m. Consulta por punto, referencia vecina explícita cuando corresponde. Respaldos verificados de La Maica y Tirani restringidos a su vecindad. |
@@ -27,7 +27,7 @@ Para una demostración preparada, desde **Encuentra tu parcela** usar **Tirani**
 | Restricciones y costos | Ventanas de siembra; semillas en Bs/ha declaradas por productor | Diferencia frente a la habitual, sin inventar precios. Rendimientos de referencia solo donde hay fuente; no se proyecta cosecha local sin calibración. |
 | Sostenibilidad | Cobertura por etapa y explicación de cereales/leguminosas | Nitrógeno, plagas y residuos son consideraciones cualitativas. No se simulan balances de nutrientes ni erosión. |
 | Recursos GAMC | GetFeatureInfo de límites distritales, periurbanos y drenaje | Los tres servicios autorizados, clave solo en servidor. Ausencia de coincidencia no significa ausencia de riesgo. |
-| Coordinación y alertas | Señales climáticas, ficha de inspección condicionada a lluvia y drenaje, aviso de agua descargable | Compartición manual. No hay recepción institucional ni envío automático contratado con GAMC/regantes. |
+| Coordinación y alertas | Ficha de inspección por lluvia y drenaje, PDF de riego y envío a canales configurables | Los canales de regantes y GAMC deben configurarse con autorización. Cada canal confirma aceptación por separado. Sin configuración, se ofrece descarga y compartición manual. |
 | Acceso simple | Consulta pública, respuestas compactas, reutilización de ubicación y datos declarados, móvil y PDF | Las fuentes nuevas requieren conexión. El service worker existente permite reabrir la interfaz; datos guardados no se presentan como pronóstico vigente. |
 
 ## Cómo se armonizan las fuentes
@@ -46,9 +46,9 @@ Se ofrecen maíz forrajero, avena forrajera, cebada forrajera, alfalfa, papa, za
 
 Los ocho perfiles añadidos usan Kc de la [tabla 12 de FAO-56](https://www.fao.org/4/x0490e/x0490e0b.htm) y raíces/agotamiento de la [tabla 22](https://www.fao.org/4/x0490e/x0490e0e.htm). La profundidad elegida está dentro del rango publicado y no supera el metro de suelo disponible. Alfalfa, maíz en grano y trigo usan el límite inferior de 1 m; raíces más profundas requieren información adicional. Alfalfa usa coeficientes por periodo de corte, maíz en grano corresponde a cosecha seca y trigo a primavera sin dormancia. Los nuevos perfiles requieren fecha de cosecha/corte en vez de inventar una duración local. Las etapas son proporciones simplificadas del ciclo declarado, no una calibración por variedad.
 
-Este catálogo amplía **el balance de agua del cultivo actual**, no la recomendación térmica ni las rotaciones, que conservan sus cuatro cultivos y requieren otra validación de calendario y adaptación local.
+El catálogo sirve para el balance del cultivo actual y la comparación pública, según la evidencia disponible. Las rotaciones con ventana estimada se contrastan con EcoCrop. La alfalfa establecida se evalúa entre cortes. El simulador histórico de La Maica conserva sus cuatro perfiles iniciales.
 
-Las rotaciones se reproducen en los dos años históricos completos descargados, conservando mes y día de las campañas propuestas. Su humedad inicial usa SMAP del día previo; si falta, usa el supuesto editable. No representa una predicción de las dos próximas campañas. El clima mensual existente usa LST y se presenta separado del balance UTC.
+Las rotaciones se reproducen en el periodo común más reciente que permita evaluar las tres secuencias de forma continua. Se conservan las fechas de referencia de las campañas y se usa SMAP del día previo cuando existe, o un supuesto del 50 % de la reserva útil. Es una comparación histórica. El clima mensual se presenta separado del balance UTC.
 
 El drenaje de GAMC aporta contexto cartográfico, no caudal, capacidad, estado de mantenimiento ni nivel de agua en los canales. Las propiedades de suelo explican almacenamiento y pérdidas; falta calibración local para modelar infiltración y anegamiento reales.
 
@@ -56,8 +56,8 @@ El drenaje de GAMC aporta contexto cartográfico, no caudal, capacidad, estado d
 
 - `src/data/smap-cochabamba.json`: humedad real regional, fechas, celdas, valores nulos y procedencia. La copia temporal disponible tiene un hueco entre septiembre y noviembre de 2026; no se interpola. Se completa la última semana desde el almacén espacial más reciente.
 - `src/data/soil-pilots.json`: extracción SoilGrids verificada para Tirani, con fecha y URL; el respaldo de La Maica permanece en `la-maica-sources.json`.
-- `src/data/imerg-early.json`: corte Early importado por Luis. Actualizarlo requiere volver a importar archivos fuente; la aplicación no lo renueva automáticamente.
-- `/api/parcel-sources`: suelo, humedad y SMAP por ubicación. `kind=history` entrega POWER/IMERG de los dos últimos años completos.
+- `src/data/imerg-early.json`: cortes Early de La Maica y Tirani. Actualizar los cortes requiere descargar e importar archivos fuente. Cada actualización conserva la otra celda.
+- `/api/parcel-sources`: suelo, humedad y SMAP por ubicación. `kind=history` entrega POWER/IMERG de los tres últimos años completos.
 - `/api/weather`, `/api/climate`, `/api/territory`: pronóstico, clima histórico y tres capas municipales existentes.
 
 ```powershell

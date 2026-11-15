@@ -27,8 +27,10 @@ export function ParcelReportQuery() {
   const area = decimal(params.get("area") ?? "");
   const reference = getReferenceCase(point.latitude, point.longitude);
   const demo = reference && params.get('demo') === reference && params.get('tipo') !== 'parcela' ? reference : undefined;
-  return <ParcelReport key={params.toString()} point={point} parcel={params.get("tipo") === "parcela"}
-    area={area > 0 ? area : null} demo={demo} savedParcelId={params.get("guardada") ?? undefined} />;
+  const reportKey = new URLSearchParams(params.toString());
+  reportKey.delete("guardada");
+  return <ParcelReport key={reportKey.toString()} point={point} parcel={params.get("tipo") === "parcela"}
+    area={Number.isFinite(area) && area > 0 ? area : null} demo={demo} savedParcelId={params.get("guardada") ?? undefined} />;
 }
 
 function ParcelReport({ point, parcel, area, demo, savedParcelId }: {
@@ -64,7 +66,7 @@ function ParcelReport({ point, parcel, area, demo, savedParcelId }: {
           <h2>{parcel ? "Resumen de la parcela" : "Resumen de la ubicación"}</h2>
           <dl className="consulta-resumen">
             <div><dt><MapPin aria-hidden="true"/> Cochabamba, Bolivia</dt><dd>{latitude.toFixed(5)}, {longitude.toFixed(5)}</dd></div>
-            {parcel && area !== null && <div><dt><Scan aria-hidden="true"/> Superficie aproximada</dt><dd>{area.toLocaleString("es-BO")} ha</dd></div>}
+            {area !== null && <div><dt><Scan aria-hidden="true"/> Superficie aproximada</dt><dd>{area.toLocaleString("es-BO")} ha</dd></div>}
           </dl>
         </section>
       </div>

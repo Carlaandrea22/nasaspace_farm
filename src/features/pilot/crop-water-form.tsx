@@ -5,8 +5,10 @@ import { Input } from "../../components/ui/input";
 import { NativeSelect } from "../../components/ui/native-select";
 import { cropForParcel, decimal, locationKey, productionPriorities, type CropWater } from "./draft";
 import { DraftActions, DraftForm, DraftHeader, Field, type DraftStatus } from "./draft-form";
+import { waterCrops } from "./water-crops";
 
 const crops = ["Maíz forrajero", "Avena forrajera", "Cebada forrajera", "Haba", "Otro"];
+const currentCrops = [...Object.keys(waterCrops), "Otro"];
 const sources = ["Canal o acequia", "Pozo", "Río", "Reservorio", "Otra"];
 const turnStatuses = ["Previsto", "Confirmado", "Retrasado", "Aplicado", "Cancelado"];
 const harvestUses = ["Forraje", "Venta", "Consumo", "Semilla"];
@@ -59,7 +61,11 @@ function CropWaterFields({ data, save, status, markEdited }: { data?: CropWater;
     const firstHarvest = value("firstHarvest");
     const secondPlanting = value("secondPlanting");
     const secondHarvest = value("secondHarvest");
-    if ((firstPlanting && firstHarvest && firstHarvest < firstPlanting) || (secondPlanting && secondHarvest && secondHarvest < secondPlanting)) {
+    const currentPlanting = value("currentPlanting");
+    const currentHarvest = value("currentHarvest");
+    if ((firstPlanting && firstHarvest && firstHarvest < firstPlanting) ||
+        (secondPlanting && secondHarvest && secondHarvest < secondPlanting) ||
+        (currentPlanting && currentHarvest && currentHarvest < currentPlanting)) {
       return setError("Revisa las fechas. La cosecha debe ser en la fecha de siembra o después.");
     }
     if (firstHarvest && secondPlanting && secondPlanting < firstHarvest) {
@@ -70,6 +76,7 @@ function CropWaterFields({ data, save, status, markEdited }: { data?: CropWater;
     const flowLs = value("flowLs") ? decimal(value("flowLs")) : null;
     const durationMinutes = value("durationMinutes") ? decimal(value("durationMinutes")) : null;
     const scenarioVolumeM3 = value("scenarioVolumeM3") ? decimal(value("scenarioVolumeM3")) : null;
+    const turnDate = value("turnDate");
     if (intervalDays !== null && (!Number.isSafeInteger(intervalDays) || intervalDays <= 0)) return setError("Ingresa la frecuencia de riego como un número entero positivo de días.");
     if (volumeM3 !== null && (!Number.isFinite(volumeM3) || volumeM3 <= 0)) return setError("Ingresa un volumen mayor que cero, en metros cúbicos.");
     if ([flowLs, durationMinutes, scenarioVolumeM3].some((entry) => entry !== null && (!Number.isFinite(entry) || entry <= 0))) return setError("El caudal, la duración y el volumen del supuesto deben ser mayores que cero.");
@@ -77,8 +84,9 @@ function CropWaterFields({ data, save, status, markEdited }: { data?: CropWater;
     void save({
       firstCrop: value("firstCrop"), firstPlanting, firstHarvest,
       secondCrop: value("secondCrop"), secondPlanting, secondHarvest,
-      priority: value("priority"), waterSource: value("waterSource"), turnDate: value("turnDate"), intervalDays, volumeM3,
-      currentCrop: value("currentCrop"), currentPlanting: value("currentPlanting"), harvestUse: value("harvestUse"),
+      priority: value("priority"), waterSource: value("waterSource"), turnDate, intervalDays, volumeM3,
+      turnDepthMm: turnDate && volumeM3 === data?.volumeM3 ? data.turnDepthMm : null,
+      currentCrop: value("currentCrop"), currentPlanting, currentHarvest, harvestUse: value("harvestUse"),
       turnStatus: value("turnStatus"), flowLs, durationMinutes, scenarioVolumeM3,
     });
   }
@@ -94,9 +102,10 @@ function CropWaterFields({ data, save, status, markEdited }: { data?: CropWater;
           <Field label="Prioridad de producción"><Choice name="priority" options={productionPriorities} value={data?.priority} /></Field>
           <section className="grid gap-3 border-t border-line pt-4" aria-labelledby="current-crop">
             <h3 id="current-crop" className="font-semibold">Lo que está sembrado ahora</h3>
-            <Field label="Cultivo actual"><Choice name="currentCrop" options={crops} value={data?.currentCrop} /></Field>
+            <Field label="Cultivo actual"><Choice name="currentCrop" options={currentCrops} value={data?.currentCrop} /></Field>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] gap-3">
               <Field label="Siembra del cultivo actual"><Input name="currentPlanting" type="date" defaultValue={data?.currentPlanting} /></Field>
+              <Field label="Cosecha o próximo corte"><Input name="currentHarvest" type="date" defaultValue={data?.currentHarvest} /></Field>
               <Field label="Uso previsto de la cosecha"><Choice name="harvestUse" options={harvestUses} value={data?.harvestUse} /></Field>
             </div>
           </section>
@@ -108,6 +117,7 @@ function CropWaterFields({ data, save, status, markEdited }: { data?: CropWater;
             <Field label="Estado del turno"><Choice name="turnStatus" options={turnStatuses} value={data?.turnStatus} /></Field>
             <Field label="Frecuencia del turno (días, opcional)"><Input name="intervalDays" inputMode="numeric" defaultValue={data?.intervalDays ?? ""} /></Field>
             <Field label="Volumen por turno (m³, opcional)"><Input name="volumeM3" inputMode="decimal" defaultValue={data?.volumeM3 ?? ""} /></Field>
+            {data?.turnDepthMm != null && <p className="text-sm text-muted">Cantidad guardada desde el informe: {data.turnDepthMm.toLocaleString("es-BO")} L/m².</p>}
             <p className="text-sm text-muted">Si conoces el caudal y la duración, puedes usarlos para estimar el volumen.</p>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-3">
               <Field label="Caudal (L/s)"><Input name="flowLs" inputMode="decimal" defaultValue={data?.flowLs ?? ""} /></Field>

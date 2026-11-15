@@ -79,6 +79,16 @@ function DraftWorkspace({ children, parcelId, controls }: { children: DraftConte
   const [revision, setRevision] = useState(0);
 
   useEffect(() => {
+    if (status !== "edited" && status !== "error" && status !== "saving") return;
+    const protectDraft = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", protectDraft);
+    return () => window.removeEventListener("beforeunload", protectDraft);
+  }, [status]);
+
+  useEffect(() => {
     let active = true;
     (account ? accountDraft<PilotDraft | undefined>(query) : readPilotDraft()).then(
       (value) => {
@@ -98,6 +108,7 @@ function DraftWorkspace({ children, parcelId, controls }: { children: DraftConte
     try {
       if (parcelId) {
         const saved = await accountDraft<PilotDraft>(query, "PATCH", patch);
+        setDraft({ value: saved });
         controls?.onSaved({ id: parcelId, name: saved.parcel?.name ?? "" });
         setLocalCopy(undefined);
         setStatus("saved-account");
@@ -184,14 +195,22 @@ export function Field({ label, children }: { label: string; children: ReactNode 
   return <label className="flex min-w-0 flex-col gap-1.5 text-sm font-semibold">{label}{children}</label>;
 }
 
-export function DraftActions({ status, next }: { status: DraftStatus; next?: { href: string; label: string } }) {
+export function DraftActions({ status, next, needsSavedParcel = false }: {
+  status: DraftStatus;
+  next?: { href: string; label: string };
+  needsSavedParcel?: boolean;
+}) {
+  const mustSave = needsSavedParcel || status === "edited" || status === "error";
   return (
     <div className="mt-7">
       <div className="flex flex-wrap gap-3">
         <Button type="submit" disabled={status === "saving"}>Guardar borrador</Button>
-        {next && status !== "saving" && <Button asChild variant="secondary"><a href={next.href}>{next.label}</a></Button>}
+        {next && (mustSave || status === "saving"
+          ? <Button type="button" variant="secondary" disabled>{next.label}</Button>
+          : <Button asChild variant="secondary"><a href={next.href}>{next.label}</a></Button>)}
       </div>
       <p className="mt-3 text-sm text-muted" role="status">
+        {status === "idle" && needsSavedParcel && "Guarda esta parcela para continuar al cultivo y riego."}
         {status === "edited" && "Cambios sin guardar"}
         {status === "saved" && "Guardado en este dispositivo"}
         {status === "saved-account" && "Guardado en tu cuenta"}

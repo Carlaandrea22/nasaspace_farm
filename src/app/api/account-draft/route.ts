@@ -1,6 +1,7 @@
-import { applyDraftPatch, type PilotDraft } from "../../../features/pilot/draft";
+import { applyDraftPatch, cropForParcel, cropWaterFromReport, locationKey, type PilotDraft } from "../../../features/pilot/draft";
+import { localDate } from "../../../features/operations/model";
 import { getAuth, pool, trustedOrigins } from "../../../server/auth";
-import { draftPatchSchema, fullDraftSchema } from "../../../server/draft-validation";
+import { draftPatchSchema, fullDraftSchema, reportWaterPatchSchema } from "../../../server/draft-validation";
 
 const headers = { "Cache-Control": "no-store" };
 const json = (data: unknown, status = 200) => Response.json(data, { status, headers });
@@ -65,20 +66,50 @@ async function write(request: Request) {
       return copied.rowCount ? json(parsed.data) : json({ error: "La cuenta ya tiene un borrador." }, 409);
     }
 
+    const report = reportWaterPatchSchema.safeParse(data);
     const parsed = draftPatchSchema.safeParse(data);
-    if (!parsed.success || !(parsed.data.parcel || parsed.data.cropWater)) return json({ error: "Borrador inválido." }, 400);
+    if (!report.success && (!parsed.success || !(parsed.data.parcel || parsed.data.cropWater))) {
+      return json({ error: "Borrador inválido." }, 400);
+    }
+    if (report.success) {
+      const today = localDate(new Date().toISOString());
+      const { planting, harvest, turn } = report.data.reportWater;
+      if (planting > today || harvest < today || (turn && turn < today)) {
+        return json({ error: "Revisa las fechas del cultivo y el turno." }, 400);
+      }
+      if (report.data.newParcel && parcelId === "default") return json({ error: "Identifica la nueva parcela." }, 400);
+    }
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
-      const initial: PilotDraft = { id: crypto.randomUUID(), version: 1 };
-      await client.query(
-        "INSERT INTO field_shift_drafts (user_id, parcel_id, draft) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
-        [userId, parcelId, JSON.stringify(initial)],
-      );
+      const newParcel = report.data?.newParcel;
+      if (!report.success || newParcel) {
+        const initial: PilotDraft = {
+          id: crypto.randomUUID(), version: 1,
+          ...(newParcel && { parcel: { ...report.data!.reportWater.location, ...newParcel } }),
+        };
+        await client.query(
+          "INSERT INTO field_shift_drafts (user_id, parcel_id, draft) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+          [userId, parcelId, JSON.stringify(initial)],
+        );
+      }
       const { rows } = await client.query<{ draft: PilotDraft }>(
         "SELECT draft FROM field_shift_drafts WHERE user_id = $1 AND parcel_id = $2 FOR UPDATE", [userId, parcelId],
       );
-      const draft = applyDraftPatch(rows[0].draft, parsed.data);
+      const previous = rows[0]?.draft;
+      if (!previous || (report.success && !previous.parcel)) {
+        await client.query("ROLLBACK");
+        return json({ error: "Guarda primero la parcela en tu cuenta." }, 404);
+      }
+      const reportWater = report.data?.reportWater;
+      if (reportWater && locationKey(previous.parcel) !== locationKey(reportWater.location)) {
+        await client.query("ROLLBACK");
+        return json({ error: "La ubicación del informe cambió. Abre de nuevo la parcela guardada." }, 409);
+      }
+      const patch = reportWater && previous.parcel
+        ? { cropWater: cropWaterFromReport(cropForParcel(previous), previous.parcel, reportWater) }
+        : parsed.data!;
+      const draft = applyDraftPatch(previous, patch);
       await client.query(
         "UPDATE field_shift_drafts SET draft = $3, updated_at = now() WHERE user_id = $1 AND parcel_id = $2",
         [userId, parcelId, JSON.stringify(draft)],

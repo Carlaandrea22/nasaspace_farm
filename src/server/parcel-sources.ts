@@ -2,11 +2,11 @@ import reference from '../data/la-maica-sources.json';
 import pilotSoils from '../data/soil-pilots.json';
 import { distanceMeters, modeledRootMoisture, parseBalanceHistory, parseSoil, soilResponseStatus, type SoilStatus } from '../domain/water-balance/source-parsers';
 import { localDate } from '../features/operations/model';
-import type { Coordinates } from '../features/pilot/draft';
+import { pilotCoordinates, type Coordinates } from '../features/pilot/draft';
 import { readRegionalSmap } from './smap';
 
-async function json(url:URL, seconds:number) {
-  const response=await fetch(url,{next:{revalidate:seconds},signal:AbortSignal.timeout(18000)});
+async function json(url:URL, seconds:number, timeoutMs = 18000) {
+  const response=await fetch(url,{next:{revalidate:seconds},signal:AbortSignal.timeout(timeoutMs)});
   if(!response.ok) throw new Error('Fuente no disponible');
   return response.json();
 }
@@ -20,22 +20,29 @@ export async function readParcelSoil(point:Coordinates) {
       return {soil:{...sample,distanceM:distance < 1 ? 0 : Math.round(distance)},soilStatus:'available' as const};
     }
   }
+  const distanceFromReference = distanceMeters(point, reference.meta.soilPoint);
+  const referenceSoil = distanceFromReference <= 350 ? {
+    soil: {
+      profile: reference.soil, point: reference.meta.soilPoint, distanceM: Math.round(distanceFromReference),
+      source: 'SoilGrids · extracción regional revisada', url: reference.meta.soilSource, queriedAt: reference.meta.fetchedAt,
+    },
+    soilStatus: 'available' as const,
+  } : null;
+  if (referenceSoil && distanceMeters(point, pilotCoordinates) <= 35) return referenceSoil;
   async function sample(p:Coordinates) {
     const url=new URL('https://rest.isric.org/soilgrids/v2.0/properties/query');
     url.searchParams.set('lat',p.latitude.toFixed(5));url.searchParams.set('lon',p.longitude.toFixed(5));
     for(const property of ['wv0033','wv1500','sand','clay'])url.searchParams.append('property',property);
     for(const depth of ['0-5cm','5-15cm','15-30cm','30-60cm','60-100cm'])url.searchParams.append('depth',depth);
     url.searchParams.set('value','mean');
-    const payload=await json(url,86400*30),profile=parseSoil(payload);
+    const payload=await json(url,86400*30,4500),profile=parseSoil(payload);
     return {soil:profile?{profile,point:p,distanceM:Math.round(distanceMeters(point,p)),source:'SoilGrids · ISRIC · 250 m',url:url.toString(),queriedAt}:null,soilStatus:soilResponseStatus(payload)};
   }
   let soilStatus:SoilStatus='unavailable';
   // Never use La Maica's profile as the default for other points.
   try { const exact=await sample(point);if(exact.soil)return exact;soilStatus=exact.soilStatus; }catch { /* Try the regional extraction within its reference radius. */ }
-  if(distanceMeters(point,reference.meta.soilPoint)<=350) return {soil:{
-    profile:reference.soil,point:reference.meta.soilPoint,distanceM:Math.round(distanceMeters(point,reference.meta.soilPoint)),
-    source:'SoilGrids · extracción regional revisada',url:reference.meta.soilSource,queriedAt:reference.meta.fetchedAt,
-  },soilStatus:'available' as const};
+  if (referenceSoil) return referenceSoil;
+  if (soilStatus === 'unavailable') return {soil:null,soilStatus};
   // A single nearby candidate, explicitly labelled, avoids hammering ISRIC's beta service.
   try {const nearby=await sample({latitude:point.latitude-.0025,longitude:point.longitude});if(nearby.soil)return nearby;}catch{ /* Preserve the status of the selected point. */ }
   return {soil:null,soilStatus};

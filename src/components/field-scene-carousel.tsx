@@ -80,18 +80,17 @@ export function FieldSceneCarousel() {
       }}
     >
       <div id={slidesId} className="field-carousel-picture">
-        {scenes.map(({ name }, index) => (
-          <div key={name} className="field-carousel-layer" data-active={index === active} aria-hidden="true">
-            <Image
-              src={`/images/field-scenes/${name}.webp`}
-              alt=""
-              fill
-              unoptimized
-              loading={index === active ? "eager" : "lazy"}
-              fetchPriority={index === 0 ? "high" : "low"}
-            />
-          </div>
-        ))}
+        <div key={scene.name} className="field-carousel-layer" data-active aria-hidden="true">
+          <Image
+            src={`/images/field-scenes/${scene.name}.webp`}
+            alt=""
+            fill
+            unoptimized
+            loading="eager"
+            fetchPriority={active === 0 ? "high" : "auto"}
+          />
+        </div>
+        <span className="absolute end-2 top-2 z-10 rounded bg-black/75 px-2 py-1 text-xs text-white">Ilustración generada con IA</span>
         <div className="field-carousel-caption" aria-live={rotating ? "off" : "polite"} aria-atomic="true">
           <span className="field-carousel-icon"><Icon size={21} aria-hidden="true" /></span>
           <div>

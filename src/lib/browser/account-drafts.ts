@@ -1,6 +1,6 @@
-import type { DraftPatch, PilotDraft } from "../../features/pilot/draft";
+import type { DraftPatch, PilotDraft, ReportWaterSave } from "../../features/pilot/draft";
 
-export async function accountDraft<T>(query: string, method = "GET", data?: DraftPatch | PilotDraft): Promise<T> {
+export async function accountDraft<T>(query: string, method = "GET", data?: DraftPatch | PilotDraft | ReportWaterSave): Promise<T> {
   const response = await fetch(`/api/account-draft?${query}`, {
     method,
     cache: "no-store",

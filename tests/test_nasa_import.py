@@ -14,6 +14,17 @@ spec.loader.exec_module(nasa)
 
 
 class NasaImportTest(unittest.TestCase):
+    def test_early_regions_are_separate_and_updating_keeps_a_verified_zero(self):
+        old = {"version": "07C", "days": {"2026-11-11": 0.0}}
+        imported = nasa.merge_early_site(old, "tirani", {"2026-11-14": 2.75}, "07C")
+        imported = nasa.merge_early_site(imported, "la-maica", {
+            "2026-11-11": None, "2026-11-14": 1.2,
+        }, "07C")
+        self.assertEqual(imported["cells"]["tirani"]["center"], {"latitude": -17.35, "longitude": -66.15})
+        self.assertEqual(imported["cells"]["la-maica"]["days"]["2026-11-11"], 0.0)
+        self.assertEqual(imported["cells"]["la-maica"]["days"]["2026-11-14"], 1.2)
+        self.assertEqual(imported["cells"]["tirani"]["days"]["2026-11-14"], 2.75)
+
     def test_hourly_rate_conversion_and_missing_intervals(self):
         start = datetime(2025, 3, 1, tzinfo=timezone.utc)
         timestamps = [start + timedelta(minutes=30 * i) for i in range(48)]

@@ -161,7 +161,7 @@ function HorizonSummary({ title, days }: { title: string; days: WeatherDay[] }) 
   );
 }
 
-function ForecastDetails({ forecast, period: selectedPeriod, onPeriodChange }: { forecast: Forecast; period?:7|14; onPeriodChange?:(period:7|14)=>void }) {
+function ForecastDetails({ forecast, period: selectedPeriod, onPeriodChange, showPeriod }: { forecast: Forecast; period?:7|14; onPeriodChange?:(period:7|14)=>void; showPeriod: boolean }) {
   const [ownPeriod, setOwnPeriod] = useState<7 | 14>(7);
   const period=selectedPeriod??ownPeriod;
   const setPeriod=onPeriodChange??setOwnPeriod;
@@ -169,11 +169,11 @@ function ForecastDetails({ forecast, period: selectedPeriod, onPeriodChange }: {
   return (
     <section aria-labelledby="forecast-title" className="panel">
       <h2 id="forecast-title" className="flex items-center gap-2 text-2xl font-bold"><CloudRain size={23} aria-hidden="true" /> Pronóstico</h2>
-      <div role="group" aria-label="Horizonte del pronóstico" className="my-3 flex gap-2">
+      {showPeriod && <div role="group" aria-label="Horizonte del pronóstico" className="my-3 flex gap-2">
         {([7, 14] as const).map((value) => (
           <Button key={value} variant="secondary" aria-pressed={period === value} className="aria-pressed:border-action aria-pressed:bg-leaf" onClick={() => setPeriod(value)}>{value} días</Button>
         ))}
-      </div>
+      </div>}
       <div aria-live="polite">
         <HorizonSummary title={`Próximos ${period} días`} days={days} />
         {period === 14 && <p className="mb-3 rounded-lg bg-leaf/65 p-2.5 text-sm leading-relaxed text-muted">La segunda semana tiene mayor incertidumbre. Confirma el pronóstico más cerca del día de riego.</p>}
@@ -196,9 +196,44 @@ function ForecastDetails({ forecast, period: selectedPeriod, onPeriodChange }: {
   );
 }
 
-function Inspection({ sheet }: { sheet: NonNullable<ReturnType<typeof buildInspection>> }) {
+type Delivery = "accepted" | "failed" | "sending";
+function Inspection({ sheet, parcelId }: { sheet: NonNullable<ReturnType<typeof buildInspection>>; parcelId?: string }) {
   const [message, setMessage] = useState("");
+  const [deliveryAvailable, setDeliveryAvailable] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [deliveries, setDeliveries] = useState<Record<"regantes" | "gamc", Delivery>>();
   const shareAvailable = typeof navigator !== "undefined" && typeof navigator.share === "function";
+
+  useEffect(() => {
+    if (!parcelId) return;
+    const controller = new AbortController();
+    fetch("/api/inspection-notices", { cache: "no-store", signal: controller.signal })
+      .then((response) => response.ok ? response.json() : null)
+      .then((configuration) => { if (!controller.signal.aborted) setDeliveryAvailable(Boolean(configuration?.available)); })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [parcelId]);
+
+  async function send() {
+    if (!parcelId || sending) return;
+    setSending(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/inspection-notices?" + new URLSearchParams({ parcel: parcelId }), {
+        method: "POST", signal: AbortSignal.timeout(20000),
+      });
+      const report = await response.json();
+      if (!response.ok) {
+        setMessage(report.error || "No pudimos enviar la ficha.");
+        return;
+      }
+      setDeliveries(report.deliveries);
+    } catch {
+      setMessage("No pudimos confirmar el envío. Intenta de nuevo con conexión.");
+    } finally {
+      setSending(false);
+    }
+  }
 
   function download() {
     const url = URL.createObjectURL(new Blob([sheet.text], { type: "text/plain;charset=utf-8" }));
@@ -232,14 +267,24 @@ function Inspection({ sheet }: { sheet: NonNullable<ReturnType<typeof buildInspe
       <div className="mt-3 flex flex-wrap gap-2">
         <Button type="button" variant="secondary" onClick={download}>Descargar ficha</Button>
         {shareAvailable && <Button type="button" onClick={() => void share()}>Compartir ficha</Button>}
+        {deliveryAvailable && (deliveries?.gamc !== "accepted" || deliveries?.regantes !== "accepted") &&
+          <Button type="button" disabled={sending} onClick={() => void send()}>
+            {sending ? "Enviando…" : deliveries ? "Reintentar envío pendiente" : "Enviar a regantes y al GAMC"}
+          </Button>}
       </div>
+      {deliveries && <ul className="mt-2 space-y-1 text-sm" aria-live="polite">
+        {(["regantes", "gamc"] as const).map((recipient) => <li key={recipient}>
+          <strong>{recipient === "gamc" ? "GAMC" : "Regantes"}</strong>{" · "}
+          {deliveries[recipient] === "accepted" ? "Aceptada por el canal" : deliveries[recipient] === "sending" ? "En proceso" : "Envío pendiente"}
+        </li>)}
+      </ul>}
       <p className="mt-2 text-sm" role="status">{message}</p>
     </section>
   );
 }
 
 export type ForecastAvailability = 'loading' | 'available' | 'unavailable' | 'cached';
-export function ForecastPanel({ parcel, cropWater, consultation, harvest, profile, onForecast, onAvailability, period, onPeriodChange }: { parcel?: Parcel; cropWater?: CropWater; consultation?: boolean; harvest?: string; profile?: Crop; onForecast?: (forecast: Forecast | undefined) => void; onAvailability?: (status:ForecastAvailability)=>void; period?:7|14; onPeriodChange?:(period:7|14)=>void }) {
+export function ForecastPanel({ parcel, parcelId, cropWater, consultation, harvest, profile, onForecast, onAvailability, period, onPeriodChange, showPeriod = true }: { parcel?: Parcel; parcelId?: string; cropWater?: CropWater; consultation?: boolean; harvest?: string; profile?: Crop; onForecast?: (forecast: Forecast | undefined) => void; onAvailability?: (status:ForecastAvailability)=>void; period?:7|14; onPeriodChange?:(period:7|14)=>void; showPeriod?: boolean }) {
   const { weather, territory, update } = useWeather(parcel ?? pilotCoordinates);
   const { forecast, cached, done } = weather;
   useEffect(() => { onForecast?.(cached ? undefined : forecast ?? undefined); }, [forecast, cached, onForecast]);
@@ -263,7 +308,7 @@ export function ForecastPanel({ parcel, cropWater, consultation, harvest, profil
       {done && !forecast && <Alert role="note" className="mb-7"><AlertTitle>Pronóstico no disponible</AlertTitle><AlertDescription>No hay datos guardados para este punto. Vuelve a consultar con conexión.</AlertDescription></Alert>}
       {cached && <Alert role="note" className="mb-7"><AlertTitle>Pronóstico de una consulta anterior</AlertTitle><AlertDescription>Consulta la fecha indicada y actualiza antes de ajustar el riego.</AlertDescription></Alert>}
       <ClimateNotices forecast={forecast} cached={cached} parcelKey={parcelKey} />
-      {sheet && <Inspection sheet={sheet} />}
+      {sheet && <Inspection key={`${parcelId}:${sheet.date}`} sheet={sheet} parcelId={parcelId} />}
       {heavy && !sheet && <Alert role="note" className="mb-7"><AlertTitle>Señal de lluvia intensa</AlertTitle><AlertDescription>
         {amount(heavy.rain)} el {formatDate(heavy.date)}. {territory?.drainage.status === "no-match"
           ? "Sin coincidencia en la consulta de drenaje cartografiado."
@@ -285,7 +330,7 @@ export function ForecastPanel({ parcel, cropWater, consultation, harvest, profil
             </ul>
             <p className="mt-3 text-sm leading-relaxed text-muted">Los días recientes usan IMERG Early cuando hay una extracción aplicable. La alternativa modelada se identifica por día.</p>
           </section>
-          <ForecastDetails forecast={forecast} period={period} onPeriodChange={onPeriodChange} />
+          <ForecastDetails forecast={forecast} period={period} onPeriodChange={onPeriodChange} showPeriod={showPeriod} />
         </div>
       )}
       <details className="mt-7 border-t border-line pt-3 text-sm">
@@ -301,7 +346,9 @@ export function NextTurn() {
   return (
     <div className="py-8 sm:py-10">
       <DraftHeader cover="water" title="Mi próximo riego" description="Consulta la lluvia esperada antes de regar." />
-      <DraftForm>{(draft) => <ForecastPanel parcel={draft?.parcel} cropWater={cropForParcel(draft)} />}</DraftForm>
+      <DraftForm>{(draft, _save, _status, _markEdited, parcelId) =>
+        <ForecastPanel parcel={draft?.parcel} parcelId={draft?.parcel ? parcelId : undefined} cropWater={cropForParcel(draft)} />
+      }</DraftForm>
     </div>
   );
 }

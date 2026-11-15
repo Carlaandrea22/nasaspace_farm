@@ -1,10 +1,11 @@
 "use client";
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Info } from 'lucide-react';
+import Link from 'next/link';
 import { Button } from '../../components/ui/button';
 import { accountDraft } from '../../lib/browser/account-drafts';
 import { readPilotDraft } from '../../lib/browser/pilot-drafts';
-import { cropForParcel, locationKey, type CropWater, type Parcel, type PilotDraft } from './draft';
+import { cropForParcel, locationKey, type CropWater, type Parcel, type PilotDraft, type ReportWater } from './draft';
 import type { ParcelMoisture, ParcelSoil } from '../../server/parcel-sources';
 import type { smapSummary } from '../../server/smap';
 import { WaterDecision } from './water-decision';
@@ -22,6 +23,8 @@ export default function ParcelDecision({ mode, parcel, demo, account, savedParce
   const waterProgress = useCallback((phase: ConsultationPhase) => onProgress('water', phase), [onProgress]);
   const rotationProgress = useCallback((phase: ConsultationPhase) => onProgress('rotations', phase), [onProgress]);
   const [known,setKnown]=useState<CropWater>();
+  const [accountParcel, setAccountParcel] = useState<string>();
+  const newParcelId = useRef<string>(undefined);
   const [evidence,setEvidence]=useState<ParcelEvidence>();
   const [draftReady, setDraftReady] = useState(Boolean(demo || (account && !savedParcelId)));
   const [error,setError]=useState('');
@@ -35,7 +38,9 @@ export default function ParcelDecision({ mode, parcel, demo, account, savedParce
       ? accountDraft<PilotDraft | undefined>(new URLSearchParams({ parcel: savedParcelId! }).toString())
       : readPilotDraft();
     draft.then((saved) => {
-      if (active && saved) setKnown(cropForParcel({ ...saved, parcel }));
+      if (!active || !saved) return;
+      if (account && locationKey(saved.parcel) === locationKey(parcel)) setAccountParcel(savedParcelId);
+      setKnown(cropForParcel({ ...saved, parcel }));
     }).catch(() => {}).finally(() => { if (active) setDraftReady(true); });
     return () => { active = false; };
   }, [account, demo, parcel, savedParcelId]);
@@ -67,6 +72,29 @@ export default function ParcelDecision({ mode, parcel, demo, account, savedParce
     void loadEvidence();
     return()=>controller.abort();
   },[parcel.latitude,parcel.longitude,attempt]);
+
+  async function saveReportWater(reportWater: ReportWater) {
+    if (!account || (savedParcelId && savedParcelId !== accountParcel)) throw new Error('account-draft');
+    const creating = !savedParcelId && !accountParcel;
+    const id = accountParcel ?? (newParcelId.current ??= crypto.randomUUID());
+    const query = new URLSearchParams({ parcel: id }).toString();
+    const saved = await accountDraft<PilotDraft>(query, 'PATCH', {
+      reportWater,
+      ...(creating && { newParcel: {
+        name: `Parcela ${parcel.latitude.toFixed(5)}, ${parcel.longitude.toFixed(5)}`,
+        areaHa: parcel.areaHa,
+      } }),
+    });
+    setKnown(cropForParcel(saved));
+    if (creating) {
+      setAccountParcel(id);
+      const url = new URL(window.location.href);
+      url.searchParams.set('guardada', id);
+      window.history.replaceState(null, '', url);
+    }
+  }
+
+  const canSave = account && !demo && (!savedParcelId || accountParcel === savedParcelId);
   return <div className="grid min-w-0 gap-4">
     {!evidence&&!error&&<p role="status" className="text-sm text-muted">Buscando información de tu terreno…</p>}
     {(error||(evidence&&!evidence.soil))&&<aside className="flex items-start gap-3 rounded-2xl bg-amber-50 p-4 sm:p-5" role="status">
@@ -81,7 +109,15 @@ export default function ParcelDecision({ mode, parcel, demo, account, savedParce
       </div>
     </aside>}
     {!draftReady && <p role="status" className="text-sm text-muted">Abriendo el cultivo guardado…</p>}
-    <div hidden={mode!=='water'} id="parcel-water">{ draftReady && visited.water && <WaterDecision parcel={parcel} evidence={evidence} known={known} onCropKnown={setKnown} onProgress={waterProgress} />}</div>
+    <div hidden={mode!=='water'} id="parcel-water">
+      {draftReady && account && savedParcelId && !canSave && !demo && <p className="consulta-no-imprimir mb-3 text-sm text-muted">
+        Para guardar cambios en este terreno, abre su informe desde{' '}
+        <Link href="/la-maica/mi-parcela" className="font-semibold underline">Mis parcelas</Link>.
+      </p>}
+      {draftReady && visited.water && <WaterDecision parcel={parcel} evidence={evidence} known={known}
+        onCropKnown={setKnown} onProgress={waterProgress} onSave={canSave ? saveReportWater : undefined}
+        creatingParcel={canSave && !savedParcelId} parcelId={canSave ? accountParcel : undefined} />}
+    </div>
     <div hidden={mode!=='rotations'} id="parcel-rotations">{draftReady && visited.rotations && <RotationDecision key={locationKey(parcel)} parcel={parcel} evidence={evidence} known={known} onProgress={rotationProgress} />}</div>
     {evidence&&<details className="rounded-2xl bg-leaf/40 p-4 text-sm">
       <summary className="cursor-pointer font-semibold">¿De dónde salen los datos de mi terreno?</summary>

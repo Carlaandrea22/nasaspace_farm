@@ -53,6 +53,11 @@ test("la portada ubica los controles de parcela a la izquierda del mapa", async 
       page.getByRole("button", { name: "Dibujar parcela" }),
     ];
     const frame = await map.boundingBox();
+    const label = page.locator('label[for="district-selector"]');
+    const labelBox = await label.boundingBox();
+    assert.ok(labelBox.y >= frame.y && labelBox.y - frame.y <= 32, "El panel debe empezar a la altura del mapa");
+    assert.ok(await label.evaluate(element => parseFloat(getComputedStyle(element).fontSize)) >= 20);
+    assert.ok((await controls[0].boundingBox()).height >= 52);
     let previous = null;
     for (const control of controls) {
       const box = await control.boundingBox();
@@ -117,6 +122,163 @@ test("el mapa acerca con la rueda y vuelve a la vista límite de Cochabamba", as
     assert.ok(latitude >= -17.59 && latitude <= -17.23);
     assert.ok(longitude >= -66.31 && longitude <= -66.01);
   } finally {
+    await browser.close();
+  }
+});
+
+test("el mapa de referencia abre con todo Cochabamba y conserva el punto de la parcela", async () => {
+  const browser = await chromium.launch(install ? { channel: install } : {});
+  try {
+    for (const width of [1440, 390]) {
+      const page = await browser.newPage({ viewport: { width, height: 900 }, reducedMotion: "reduce" });
+      try {
+        await page.goto(origin + "/la-maica/mi-parcela");
+        const map = page.locator("#parcel-map .parcel-viewport");
+        const districts = page.getByRole("combobox", { name: "Selecciona tu distrito" });
+        await districts.getByRole("option", { name: "Todo Cochabamba" }).waitFor({ state: "attached" });
+        assert.equal(await districts.inputValue(), "");
+        assert.equal(await map.getByRole("button", { name: "Alejar mapa" }).getAttribute("aria-disabled"), "true");
+        assert.equal(await page.getByRole("checkbox", { name: "Satélite" }).isChecked(), true);
+        await map.locator(".leaflet-parcel-point-pane path[fill-opacity='1']").waitFor();
+        const labels = await map.locator(".priority-district").evaluateAll((elements) => elements.map((label) => {
+          const bounds = label.getBoundingClientRect();
+          const frame = label.closest(".parcel-viewport").getBoundingClientRect();
+          return bounds.width > 0 && bounds.left >= frame.left && bounds.right <= frame.right &&
+            bounds.top >= frame.top && bounds.bottom <= frame.bottom;
+        }));
+        assert.deepEqual(labels, [true, true, true]);
+      } finally {
+        await page.close();
+      }
+    }
+  } finally {
+    await browser.close();
+  }
+});
+
+test("las capas GAMC conservan su posición mientras carga la imagen del nuevo encuadre", async () => {
+  const browser = await chromium.launch(install ? { channel: install } : {});
+  let pending;
+  try {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce", serviceWorkers: "block" });
+    page.setDefaultTimeout(6000);
+    const isMapImage = (url) => url.pathname === "/api/territory" && url.searchParams.get("operation") === "map";
+    await page.route(isMapImage, async (route) => {
+      if (pending) await pending.promise;
+      await route.fulfill({
+        contentType: "image/svg+xml",
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#405837"/></svg>',
+      });
+    });
+    await page.goto(origin + "/la-maica/mi-parcela");
+    const map = page.locator("#parcel-map .parcel-viewport");
+    const selector = page.getByRole("combobox", { name: "Capa GAMC" });
+    const image = map.locator('.leaflet-territory-pane img:not([style*="opacity: 0;"])');
+    const waitForSource = (source) => page.waitForFunction((url) => {
+      const images = [...document.querySelectorAll(".leaflet-territory-pane img")].filter((image) => image.style.opacity !== "0");
+      return images.length === 1 && images[0].src === url && images[0].complete && images[0].naturalWidth > 0;
+    }, source);
+    const relativeRect = (locator) => locator.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      const frame = element.closest(".parcel-viewport").getBoundingClientRect();
+      return { left: box.left - frame.left, top: box.top - frame.top, width: box.width, height: box.height };
+    });
+    const marker = map.locator(".leaflet-parcel-point-pane path[fill-opacity='1']");
+
+    for (const layer of ["district", "periurban", "drainage"]) {
+      await page.getByRole("button", { name: "Ver todos los distritos" }).click();
+      const initialRequest = page.waitForRequest((request) => new URL(request.url()).searchParams.get("layer") === layer);
+      await selector.selectOption(layer);
+      const initialUrl = (await initialRequest).url();
+      await waitForSource(initialUrl);
+      await map.scrollIntoViewIfNeeded();
+      const original = await relativeRect(image);
+
+      pending = Promise.withResolvers();
+      const zoomRequest = page.waitForRequest((request) => isMapImage(new URL(request.url())));
+      await map.getByRole("button", { name: "Acercar mapa" }).click();
+      const zoomUrl = (await zoomRequest).url();
+      assert.notEqual(zoomUrl, initialUrl);
+      assert.equal(await image.evaluate((element) => element.src), initialUrl);
+      assert.ok((await relativeRect(image)).width > 1.5 * original.width);
+      pending.resolve();
+      pending = undefined;
+      await waitForSource(zoomUrl);
+
+      const zoomed = await relativeRect(image);
+      const markerBeforePan = await relativeRect(marker);
+      const frame = await map.boundingBox();
+      pending = Promise.withResolvers();
+      const panRequest = page.waitForRequest((request) => isMapImage(new URL(request.url())));
+      await page.mouse.move(frame.x + frame.width / 2, frame.y + frame.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(frame.x + frame.width / 2 + 65, frame.y + frame.height / 2 + 35, { steps: 10 });
+      await page.mouse.up();
+      const panUrl = (await panRequest).url();
+      assert.notEqual(panUrl, zoomUrl);
+      assert.equal(await image.evaluate((element) => element.src), zoomUrl);
+      const panned = await relativeRect(image);
+      const markerAfterPan = await relativeRect(marker);
+      assert.ok(panned.top > zoomed.top + 20);
+      assert.ok(Math.abs((panned.left - zoomed.left) - (markerAfterPan.left - markerBeforePan.left)) <= 1);
+      assert.ok(Math.abs((panned.top - zoomed.top) - (markerAfterPan.top - markerBeforePan.top)) <= 1);
+      pending.resolve();
+      pending = undefined;
+      await waitForSource(panUrl);
+      await selector.selectOption("");
+      await image.waitFor({ state: "detached" });
+    }
+  } finally {
+    pending?.resolve();
+    await browser.close();
+  }
+});
+
+test("el mapa mantiene imagen satelital al arrastrar y alejar con teselas lentas", async () => {
+  const browser = await chromium.launch(install ? { channel: install } : {});
+  let holdTiles = false;
+  const pendingTiles = Promise.withResolvers();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1300, height: 900 }, reducedMotion: "reduce" });
+    page.setDefaultTimeout(6000);
+    await page.route("https://server.arcgisonline.com/**/tile/**", async (route) => {
+      if (holdTiles) await pendingTiles.promise;
+      await route.fulfill({
+        contentType: "image/svg+xml",
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#846545"/></svg>',
+      }).catch(() => {});
+    });
+    await page.goto(origin);
+    const map = page.getByRole("region", { name: "Mapa de Cochabamba" });
+    await map.locator(".leaflet-tile-loaded").first().waitFor();
+    await page.getByRole("button", { name: "La Maica", exact: true }).click();
+    await map.locator('img.leaflet-tile-loaded[src*="/tile/17/"]').first().waitFor();
+    await page.waitForFunction(() => [...document.querySelectorAll(".leaflet-tile-loaded")].every(tile => getComputedStyle(tile).opacity === "1"));
+    await map.scrollIntoViewIfNeeded();
+
+    const countCoveredPoints = () => map.evaluate((element) => {
+      const frame = element.getBoundingClientRect();
+      const tiles = [...element.querySelectorAll("img.leaflet-tile-loaded, img.satellite-preview")]
+        .filter(tile => tile.complete && tile.naturalWidth > 0 && getComputedStyle(tile).opacity === "1")
+        .map(tile => tile.getBoundingClientRect());
+      const points = [0.1, 0.3, 0.5, 0.7, 0.9].flatMap(x => [0.2, 0.5, 0.8].map(y => [frame.left + x * frame.width, frame.top + y * frame.height]));
+      return points.filter(([x, y]) => tiles.some(tile => tile.left <= x && x <= tile.right && tile.top <= y && y <= tile.bottom)).length;
+    });
+
+    assert.equal(await countCoveredPoints(), 15);
+    holdTiles = true;
+    const frame = await map.boundingBox();
+    await page.mouse.move(frame.x + frame.width * 0.8, frame.y + frame.height * 0.5);
+    await page.mouse.down();
+    await page.mouse.move(frame.x + frame.width * 0.2, frame.y + frame.height * 0.5, { steps: 9 });
+    await page.mouse.up();
+    assert.equal(await countCoveredPoints(), 15, "Cobertura durante el desplazamiento");
+    const request = page.waitForRequest(/server\.arcgisonline\.com.*\/tile\/16\//);
+    await map.getByRole("button", { name: "Alejar mapa" }).click();
+    await request;
+    assert.equal(await countCoveredPoints(), 15, "Cobertura durante el alejamiento");
+  } finally {
+    pendingTiles.resolve();
     await browser.close();
   }
 });

@@ -54,6 +54,10 @@ body {
   padding-inline-start: var(--site-header-edge);
 }
 
+.header-brand {
+  @apply flex min-w-0 items-center gap-2;
+}
+
 .brand {
   @apply inline-flex min-w-0 items-center gap-2 sm:gap-2.5;
 }
@@ -95,9 +99,21 @@ body {
   @apply bg-white/10;
 }
 
-@media (max-width: 37.99rem) {
+@media (width < 55rem) {
+  html:has(.guest-navigation) {
+    scroll-padding-top: 7.5rem;
+  }
+
   .header-inner:has(.guest-navigation) {
-    @apply flex-wrap gap-x-3 gap-y-2 py-2.5;
+    @apply grid justify-stretch justify-items-center gap-2 px-3 py-2.5;
+  }
+
+  .guest-navigation {
+    @apply grid w-full max-w-[28rem] grid-cols-3 items-stretch gap-1;
+  }
+
+  .guest-navigation > :is(.guest-link, .project-link) {
+    @apply min-w-0 justify-center px-1 py-1 text-center leading-tight;
   }
 }
 
@@ -110,8 +126,10 @@ body {
   padding: 1rem clamp(0.75rem, 2.5vw, 2rem) 2rem;
 }
 
-.app-frame:has(:where(.app-navigation)) main {
-  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+@media screen and (width < 55rem) {
+  .app-frame:has(.app-navigation) main {
+    padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+  }
 }
 
 .app-navigation {
@@ -136,6 +154,68 @@ body {
   @apply bg-[#cce994];
 }
 
+.desktop-navigation {
+  display: none;
+}
+
+html:has(.navigation-drawer:modal) {
+  overflow: hidden;
+}
+
+.navigation-trigger, .navigation-close {
+  @apply grid size-11 shrink-0 cursor-pointer place-items-center rounded-xl text-[#f7ffec] hover:bg-[#354d30] focus-visible:outline-[#d9efad] focus-visible:outline-offset-[-3px] motion-safe:transition-colors;
+}
+
+.navigation-close {
+  margin-block: calc((var(--site-header-height) - 2.75rem) / 2);
+  margin-inline-start: var(--site-header-edge);
+  background: #263e29;
+}
+
+.navigation-drawer {
+  position: fixed;
+  inset: 0 auto auto 0;
+  margin: 0;
+  width: min(14.5rem, calc(100vw - 2.75rem));
+  max-height: 100dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: transparent;
+}
+
+.navigation-drawer::backdrop {
+  background: #101e1629;
+}
+
+.navigation-drawer-links {
+  @apply grid gap-1 rounded-e-[14px] border border-s-0 border-[#d8e4cf] bg-[#f7f9ef] p-2;
+}
+
+.navigation-drawer-links a {
+  @apply flex min-h-11 items-center gap-2 rounded-[8px] px-2 text-sm font-semibold text-ink hover:bg-[#ecf1e2] focus-visible:outline-offset-[-2px] motion-safe:transition-colors;
+}
+
+.navigation-drawer-links .nav-icon {
+  @apply text-[#526b4f];
+}
+
+.navigation-drawer-links a[aria-current="page"] {
+  @apply bg-[#dcecc8] text-[#233d26];
+}
+
+.navigation-drawer-links a[aria-current="page"] .nav-icon {
+  @apply text-[#2e542f];
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .navigation-drawer[open] .navigation-drawer-links { animation: navigation-enter 150ms ease-out; }
+}
+
+@keyframes navigation-enter {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
 @media (min-width: 55rem) {
   body {
     background: linear-gradient(180deg, #21351f1f, #21351f70 44%, #233722ba), url("/images/carla-valle.webp") center top / cover fixed;
@@ -145,37 +225,15 @@ body {
     padding: 24px 28px 70px;
   }
 
-  .app-frame:has(.app-navigation) {
-    display: grid;
-    grid-template-columns: 210px minmax(0, 1fr);
-    align-items: start;
-    gap: 24px;
+  .desktop-navigation {
+    display: block;
   }
 
   .app-navigation {
-    @apply sticky top-[calc(var(--site-header-height)+1rem)] flex flex-col gap-[7px] rounded-[23px] border border-[#38502d] p-[13px] backdrop-blur-none;
-    background: linear-gradient(155deg, #304b27, #22351e);
-    box-shadow: 0 12px 27px #22351e25;
+    display: none;
   }
 
-  .app-navigation a {
-    @apply min-h-12 flex-row justify-start gap-2.5 p-2 text-left text-sm text-[#e9f2df] hover:bg-white/10;
-  }
-
-  .app-navigation a[aria-current="page"] {
-    @apply bg-[#ddf1b8] text-[#23381b];
-  }
-
-  .app-navigation .nav-icon {
-    @apply size-[34px] bg-white/10 text-[#d7ecc7];
-  }
-
-  .app-navigation a[aria-current="page"] .nav-icon {
-    @apply bg-[#354e28] text-[#e3f2c8];
-  }
-
-  .app-frame main,
-  .app-frame:has(:where(.app-navigation)) main {
+  .app-frame main {
     padding: 22px;
     background: #f0f4e9;
     border: 1px solid #ffffff8c;
@@ -307,7 +365,12 @@ h2 {
   display: none;
 }
 
-@media (max-width: 639px) {
+/* Keep only the reference districts at the municipal zoom to avoid overlapping labels. */
+.parcel-viewport.overview-district-labels .district-label:not(.priority-district) {
+  display: none;
+}
+
+@media (max-width: 768px) {
   .parcel-viewport .district-label:not(.priority-district) {
     display: none;
   }
@@ -484,29 +547,51 @@ h2 {
 }
 
 .map-distribution {
-  @apply grid min-w-0 items-center gap-4;
+  @apply grid min-w-0 items-start gap-4;
 }
 
-@media (min-width: 701px) {
+@media (min-width: 55rem) {
   .map-distribution {
-    grid-template-columns: minmax(200px, 0.4fr) minmax(0, 1fr);
+    grid-template-columns: minmax(14rem, 0.4fr) minmax(0, 1fr);
   }
 }
 
 .map-controls {
-  @apply grid min-w-0 gap-4 rounded-[19px] border border-line bg-[#f1f5e9] p-4;
+  @apply grid min-w-0 gap-3 rounded-[19px] border border-[#d6e2cd] bg-[#f1f5e9] p-[clamp(0.875rem,1.55vw,1.5rem)];
+}
+
+.map-controls .map-district {
+  @apply gap-3 border-b border-[#d6e2cd] pb-4;
+}
+
+@media (36rem <= width < 55rem) {
+  .map-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .map-controls .map-district, .map-controls > [role="status"] {
+    grid-column: 1 / -1;
+  }
 }
 
 .map-controls .map-control-label {
-  @apply justify-center text-center;
+  @apply gap-2.5 text-[clamp(1.125rem,0.98rem+0.36vw,1.375rem)] leading-tight tracking-tight;
 }
 
 .map-controls .map-control-label svg {
-  @apply box-content rounded-[9px] bg-[#deedce] p-2;
+  @apply box-content rounded-[10px] bg-[#deedce] p-2.5;
 }
 
 .map-controls .map-district select {
-  @apply min-h-12;
+  @apply min-h-14 appearance-none border-[#91ab86] ps-3.5 pe-10 text-[1.0625rem] font-semibold enabled:cursor-pointer enabled:hover:border-action forced-colors:appearance-auto motion-safe:transition-colors;
+}
+
+.map-controls [data-slot="button"] {
+  @apply justify-start border-[#d1dec7] px-3.5 text-start hover:border-action;
+}
+
+.map-controls [data-slot="button"] svg {
+  @apply shrink-0 text-[#3b6034];
 }
 
 .map-control-label {

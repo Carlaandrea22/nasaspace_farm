@@ -55,7 +55,8 @@ test("una cuenta nueva guarda y vuelve a abrir dos parcelas independientes", { s
     assert.equal(await visitor.getByLabel("Nombre de la parcela (opcional)").inputValue(), "Chacra");
     await visitor.getByRole("link", { name: "Ir a cultivo y agua" }).click();
     assert.equal(await visitor.getByLabel("Caudal (L/s)").inputValue(), "");
-    await visitor.getByRole("link", { name: "Mis parcelas" }).click();
+    await visitor.getByRole("button", { name: "Abrir menú" }).click();
+    await visitor.getByRole("dialog", { name: "Menú" }).getByRole("link", { name: "Mis parcelas" }).click();
     await visitor.getByLabel("Parcelas guardadas").selectOption({ label: "Huerta" });
     await visitor.getByRole("link", { name: "Ir a cultivo y agua" }).click();
     assert.equal(await visitor.getByLabel("Caudal (L/s)").inputValue(), "9");

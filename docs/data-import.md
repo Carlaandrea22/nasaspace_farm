@@ -58,6 +58,10 @@ Para reproducir el corte, filtra del `2026-11-11 04:00 UTC` al `2026-11-14 03:59
 
 También se admite un CSV revisado con encabezado `timestamp_utc,precipitation` para medias horas UTC o `date,precipitation` para Final diario UTC. La conversión conserva cero como valor válido. Una marca fuera de la rejilla o un intervalo duplicado se trata como error. Con cualquier intervalo faltante, el total del día queda `null`. Una importación sin ningún día completo conserva el corte anterior. Usa `--units mm` únicamente si cada intervalo de media hora contiene una acumulación y la escala ya se aplicó.
 
+Para incorporar Tirani, usa el mismo conjunto de granulos originales si contiene esa celda. Agrega `--site tirani` en ambos comandos. El importador verifica que la coordenada de la grilla sea la de Tirani y actualiza únicamente esa celda. Si la descarga es regional, debe incluir el centro `−17.35, −66.15`. La celda de La Maica se conserva y se puede actualizar con `--site la-maica`.
+
+El corte incluido de **Tirani** se extrajo de los mismos 144 gránulos HDF5 V07C. Los 48 intervalos de cada día local dieron **0 mm** el 11, **10,735 mm** el 12 y **5,64 mm** el 13 de noviembre de 2026. La extracción de control de La Maica reprodujo sus tres totales. El 14 y las ubicaciones fuera de ambas celdas usan la alternativa de Open-Meteo cuando está disponible, con su etiqueta de estimación.
+
 Fuentes y cita. [Directorio NASA GPM](https://gpm.nasa.gov/data/directory) · [Final diario V07](https://disc.gsfc.nasa.gov/datasets/GPM_3IMERGDF_07/summary) · [Early de media hora V07](https://disc.gsfc.nasa.gov/datasets/GPM_3IMERGHHE_07/summary) · [NASA GIS Final](https://gis.earthdata.nasa.gov/portal/rest/services/GESDISC/GPM_3IMERGHH/ImageServer) · [NASA GIS Early](https://gis.earthdata.nasa.gov/portal/rest/services/GESDISC/GPM_3IMERGHHE/ImageServer)
 
 ## SMAP L4 v8

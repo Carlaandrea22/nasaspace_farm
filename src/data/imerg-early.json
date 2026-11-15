@@ -11,5 +11,19 @@
   },
   "source": "https://gpm.nasa.gov/data/directory",
   "timeStandard": "America/La_Paz",
-  "version": "07C"
+  "version": "07C",
+  "cells": {
+    "tirani": {
+      "center": {
+        "latitude": -17.35,
+        "longitude": -66.15
+      },
+      "days": {
+        "2026-11-11": 0.0,
+        "2026-11-12": 10.735,
+        "2026-11-13": 5.64
+      },
+      "version": "07C"
+    }
+  }
 }

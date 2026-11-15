@@ -36,6 +36,10 @@ En **Mis parcelas**, marca la ubicación o dibuja el contorno, escribe un nombre
 
 **Cuenta local de prueba.** Entra con el ID `prueba` y la contraseña inicial `prueba123`. En la cabecera aparece **Luis**. Si el volumen ya contiene esa cuenta, se conserva la contraseña con la que se creó. El modo invitado permite guardar un borrador en el dispositivo incluso sin conexión. Las cuentas requieren conexión al servidor local.
 
+**Guardar desde el informe.** Con sesión abierta, **Guardar cultivo y turno** vincula la siembra, la cosecha o corte, la fecha de riego y el agua por m² con la parcela guardada. Si llegas desde una ubicación nueva, **Guardar parcela, cultivo y turno** guarda el punto y la superficie de la consulta. Para conservar también los cuatro vértices, guarda el contorno primero en **Mis parcelas**. El retraso simulado se puede comparar con el turno declarado; guardar conserva la fecha declarada.
+
+**Canales de inspección.** Para habilitar el envío desde una parcela guardada, configura `GAMC_INSPECTION_WEBHOOK` y `REGANTES_INSPECTION_WEBHOOK` con los canales HTTPS autorizados. El servidor revalida el pronóstico y el drenaje y registra la aceptación por canal. El cuerpo del POST es un aviso JSON y el encabezado `Idempotency-Key` identifica el aviso para deduplicación en el receptor. Si el adaptador lo exige, configura `INSPECTION_WEBHOOK_TOKEN`. Sin ambos canales, la ficha puede descargarse y compartirse manualmente.
+
 Para desarrollar y ejecutar las pruebas en la máquina, usa Node.js 24 y Python 3.11+.
 
 ```sh
@@ -50,7 +54,7 @@ npm run test:e2e
 
 Las pruebas de navegador se ejecutan con Docker en marcha y se pueden dirigir a otro puerto con `FIELD_SHIFT_TEST_URL`. Con Chrome ya instalado, `PLAYWRIGHT_CHROMIUM_CHANNEL=chrome npm run test:e2e` usa ese navegador.
 
-Las pruebas `tests/account.e2e.mjs` y `tests/account-registration.e2e.mjs` usan `FIELD_SHIFT_TEST_URL` y una instancia de Docker de prueba con una base vacía. Cubren la cuenta de Luis, el registro, el acceso desde otro navegador y la recuperación de varias parcelas.
+Las pruebas `tests/account.e2e.mjs`, `tests/account-registration.e2e.mjs` y `tests/report-account.e2e.mjs` usan `FIELD_SHIFT_TEST_URL` y una instancia de Docker de prueba con una base vacía. Ejecútalas con `node --test --test-concurrency=1 tests/account.e2e.mjs tests/account-registration.e2e.mjs tests/report-account.e2e.mjs`. Cubren registro, datos de varias parcelas y guardado desde el informe con recuperación en desktop y móvil.
 
 ## Guion de demo
 

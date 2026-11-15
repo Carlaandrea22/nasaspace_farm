@@ -21,8 +21,11 @@ services:
     restart: unless-stopped
     environment:
       GAMC_API_KEY: ${GAMC_API_KEY:-}
+      GAMC_INSPECTION_WEBHOOK: ${GAMC_INSPECTION_WEBHOOK:-}
+      REGANTES_INSPECTION_WEBHOOK: ${REGANTES_INSPECTION_WEBHOOK:-}
+      INSPECTION_WEBHOOK_TOKEN: ${INSPECTION_WEBHOOK_TOKEN:-}
       DATABASE_URL: postgres://fieldshift:${FIELD_SHIFT_DB_PASSWORD:-fieldshift-local}@db:5432/fieldshift
-      BETTER_AUTH_URL: http://localhost:${FIELD_SHIFT_PORT:-3000}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:${FIELD_SHIFT_PORT:-3000}}
       FIELD_SHIFT_DEMO_ENABLED: ${FIELD_SHIFT_DEMO_ENABLED:-true}
       FIELD_SHIFT_DEMO_PASSWORD: ${FIELD_SHIFT_DEMO_PASSWORD:-prueba123}
     depends_on:

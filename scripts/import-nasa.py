@@ -6,7 +6,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from io import BytesIO
 from itertools import product
 import json
-from math import asin, cos, isfinite, radians, sin, sqrt
+from math import asin, cos, floor, isfinite, radians, sin, sqrt
 from pathlib import Path
 import re
 from statistics import fmean
@@ -23,6 +23,7 @@ IMERG_SOURCE = "https://gpm.nasa.gov/data/directory"
 SMAP_SOURCE = "https://doi.org/10.5067/T5RUATAQREF8"
 LOCAL_TIME = ZoneInfo("America/La_Paz")
 POINT = (-66.18272, -17.42442)
+EARLY_SITES = {"la-maica": POINT, "tirani": (-66.15458, -17.34170)}
 SOIL_BOUNDS = (-66.194, -17.435, -66.174, -17.415)
 POWER_FIELDS = {
     "tmax": ("T2M_MAX", "C"),
@@ -270,7 +271,29 @@ def normalize_appeears(source, destination):
         writer.writerows(rows)
 
 
-def normalize_imerg_file(directory, destination, run, version, daily):
+def imerg_center(value):
+    return round((floor(value * 10) + 0.5) / 10, 2)
+
+
+def merge_early_site(data, site, days, version):
+    longitude, latitude = EARLY_SITES[site]
+    cells = data.setdefault("cells", {})
+    existing = cells.get(site, {})
+    past = existing.get("days", {}) if existing.get("version") == version else {}
+    if not existing and site == "la-maica" and data.get("version") == version:
+        past = data.get("days", {})
+    merged = dict(past)
+    merged.update({day: value for day, value in days.items() if day not in past or value is not None})
+    dates = sorted(merged)[-21:]
+    cells[site] = {
+        "center": {"latitude": imerg_center(latitude), "longitude": imerg_center(longitude)},
+        "days": {day: merged[day] for day in dates},
+        "version": version,
+    }
+    return data
+
+
+def normalize_imerg_file(directory, destination, run, version, daily, point=POINT):
     """Sample original NASA files or spatial subsets with retained metadata."""
     import xarray as xr
 
@@ -292,9 +315,9 @@ def normalize_imerg_file(directory, destination, run, version, daily):
             units = rain.attrs["units"].lower().replace(" ", "")
             if units not in (("mm/day", "mmd-1") if daily else ("mm/hr", "mm/h", "mmh-1")):
                 raise ValueError(f"Unidades IMERG incompatibles en {path.name}: {units}")
-            pixel = rain.sel(lat=POINT[1], lon=POINT[0], method="nearest")
-            if abs(pixel["lat"].item() - POINT[1]) > 0.075 or abs(pixel["lon"].item() - POINT[0]) > 0.075:
-                raise ValueError(f"El granulo {path.name} no contiene el punto de La Maica")
+            pixel = rain.sel(lat=point[1], lon=point[0], method="nearest")
+            if abs(pixel["lat"].item() - imerg_center(point[1])) > 0.001 or abs(pixel["lon"].item() - imerg_center(point[0])) > 0.001:
+                raise ValueError(f"El granulo {path.name} no contiene la celda IMERG seleccionada")
             stamps[stamp] = valid_number(pixel.item(), 0)
     if not stamps:
         raise ValueError("No se encontraron granulos IMERG en el directorio")
@@ -322,6 +345,8 @@ def main():
             choices=("mm/h", "mm", "mm/day") if name == "imerg-final" else ("mm/h", "mm"),
         )
         command.add_argument("--version", required=True, choices=("07B", "07C"))
+        if name == "imerg-early":
+            command.add_argument("--site", default="la-maica", choices=EARLY_SITES)
     smap = commands.add_parser("smap")
     smap.add_argument("csv", type=Path)
     appeears = commands.add_parser("normalize-appeears")
@@ -333,6 +358,7 @@ def main():
     imerg_files.add_argument("--daily", action="store_true")
     imerg_files.add_argument("--run", required=True, choices=("early", "final"))
     imerg_files.add_argument("--version", required=True, choices=("07B", "07C"))
+    imerg_files.add_argument("--site", default="la-maica", choices=EARLY_SITES)
     for name in ("power", "imerg-final", "imerg-early"):
         command = commands.choices[name]
         command.add_argument("--start", required=True, type=date.fromisoformat)
@@ -344,16 +370,16 @@ def main():
     if args.command == "normalize-imerg":
         if args.daily and args.run != "final":
             parser.error("IMERG Early requiere granulos de 30 min para reconstruir el día boliviano")
-        normalize_imerg_file(args.directory, args.destination, args.run, args.version, args.daily)
+        if args.run == "final" and args.site != "la-maica":
+            parser.error("El corte histórico del piloto Final corresponde a La Maica")
+        normalize_imerg_file(args.directory, args.destination, args.run, args.version, args.daily, EARLY_SITES[args.site])
         return
     if args.command == "imerg-early":
         data = read_json(RECENT)
         days = import_imerg(args.csv, args.start, args.end, LOCAL_TIME, args.units)
         if all(value is None for value in days.values()):
             parser.error("IMERG Early no contiene ningún día completo en hora boliviana. Se conserva el corte anterior.")
-        data["days"] = days
-        data["version"] = args.version
-        write_json(RECENT, data)
+        write_json(RECENT, merge_early_site(data, args.site, days, args.version))
         return
     data = read_json(HISTORICAL)
     if args.command == "power":

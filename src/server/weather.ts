@@ -5,7 +5,14 @@ import { forecastHorizonDays, timeZone, toForecast } from "../features/operation
 type Point = { latitude: number; longitude: number };
 
 function relevantEarly(point: Point) {
-  const { location, days } = earlyData as { location?: Point & { radiusKm: number }; days?: Record<string, number | null> };
+  const { location, days, cells } = earlyData as {
+    location?: Point;
+    days?: Record<string, number | null>;
+    cells?: Record<string, { center: Point; days: Record<string, number | null> }>;
+  };
+  for (const cell of Object.values(cells ?? {})) {
+    if (sameImergCell(point.latitude, point.longitude, cell.center.latitude, cell.center.longitude)) return cell.days;
+  }
   if (!location || !days) return {};
   // The imported HDF5 extraction identifies this actual 0.1° pixel, not a radius.
   return sameImergCell(point.latitude, point.longitude, -17.45, -66.15) ? days : {};

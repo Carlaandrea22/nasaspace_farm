@@ -43,8 +43,11 @@ function ParcelFields({ parcel, explore, parcelId, save, status, markEdited }: {
     params.set("lat", String(selected.latitude));
     params.set("lon", String(selected.longitude));
     if (outline) params.set("tipo", "parcela");
-    if (outline && decimal(area) > 0) params.set("area", String(decimal(area)));
-    if (parcelId) params.set("guardada", parcelId);
+    const areaHa = decimal(area);
+    if (Number.isFinite(areaHa) && areaHa > 0) params.set("area", String(areaHa));
+    if (parcelId && parcel?.latitude === selected.latitude && parcel.longitude === selected.longitude) {
+      params.set("guardada", parcelId);
+    }
   }
   const savedTerritory = parcel && selected && parcel.latitude === selected.latitude &&
     parcel.longitude === selected.longitude ? parcel.territory : undefined;
@@ -136,7 +139,8 @@ function ParcelFields({ parcel, explore, parcelId, save, status, markEdited }: {
               <Field label="Superficie (ha, opcional)"><Input name="area" inputMode="decimal" value={area} onChange={event => setArea(event.target.value)} /></Field>
             </fieldset>
             {error && <p role="alert" className="mt-3 text-sm text-red-800">{error}</p>}
-            <DraftActions status={status} next={{ href: "/la-maica/mi-cultivo-y-mi-agua", label: "Ir a cultivo y agua" }} />
+            <DraftActions status={status} needsSavedParcel={Boolean(parcelId && !parcel)}
+              next={{ href: "/la-maica/mi-cultivo-y-mi-agua", label: "Ir a cultivo y agua" }} />
           </form>
         </section>}
       </div>

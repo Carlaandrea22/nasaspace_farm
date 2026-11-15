@@ -2,9 +2,7 @@
 
 import type { FeatureCollection, GeoJsonObject, MultiPolygon, Polygon } from "geojson";
 import * as L from "leaflet";
-import { maplibreGL } from "@maplibre/maplibre-gl-leaflet";
-import { setWorkerUrl } from "maplibre-gl";
-import { Crop, Crosshair, Layers2, LocateFixed, MapPinned } from "lucide-react";
+import { ChevronDown, Crop, Crosshair, Layers2, LocateFixed, MapPinned } from "lucide-react";
 import { useCallback, useEffect, useEffectEvent, useId, useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
 import { NativeSelect } from "../../components/ui/native-select";
@@ -19,6 +17,7 @@ const city: L.LatLngTuple = [-17.3936, -66.1569];
 const cityBounds = L.latLngBounds([-17.59, -66.31], [-17.23, -66.01]);
 const overviewPadding = L.point(38, 38);
 const zoomSnap = 0.25;
+const satelliteTiles = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 const primaryDistricts = new Set(["9", "13", "15"]);
 const outlineCorners = 4;
 const clickDelayMs = 500;
@@ -49,6 +48,27 @@ function showCityOverview(map: L.Map) {
   map.setView(cityBounds.getCenter(), map.getMinZoom(), { animate: false });
 }
 
+function satellitePreview(map: L.Map) {
+  const zoom = 8;
+  const tileSize = 256;
+  // Include the margins around the city that can be visible in the overview.
+  const coverage = cityBounds.pad(2);
+  const first = map.project(coverage.getNorthWest(), zoom).divideBy(tileSize).floor();
+  const last = map.project(coverage.getSouthEast(), zoom).divideBy(tileSize).floor();
+  const images: L.ImageOverlay[] = [];
+  for (let y = first.y; y <= last.y; y++) {
+    for (let x = first.x; x <= last.x; x++) {
+      const nw = map.unproject(L.point(x * tileSize, y * tileSize), zoom);
+      const se = map.unproject(L.point((x + 1) * tileSize, (y + 1) * tileSize), zoom);
+      // Image overlays keep their content when Leaflet resets the detailed tile grid.
+      images.push(L.imageOverlay(L.Util.template(satelliteTiles, { x, y, z: zoom }), L.latLngBounds(nw, se), {
+        pane: "tilePane", zIndex: 0, className: "satellite-preview",
+      }));
+    }
+  }
+  return images;
+}
+
 function pilotRegion(location: Coordinates) {
   if (inMap(location)) return "la-maica";
   const [[south, west], [north, east]] = recorteTunari;
@@ -56,8 +76,7 @@ function pilotRegion(location: Coordinates) {
   return "custom";
 }
 
-function currentView(map: L.Map) {
-  const bounds = map.getBounds();
+function currentView(map: L.Map, bounds = map.getBounds()) {
   const sw = L.CRS.EPSG3857.project(bounds.getSouthWest());
   const ne = L.CRS.EPSG3857.project(bounds.getNorthEast());
   const size = map.getSize();
@@ -88,7 +107,7 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
   const [showDistricts, setShowDistricts] = useState(true);
   const [districtError, setDistrictError] = useState(false);
   const [online, setOnline] = useState(() => navigator.onLine);
-  const [satellite, setSatellite] = useState(overview);
+  const [satellite, setSatellite] = useState(() => !window.matchMedia("(pointer: coarse)").matches);
   const [locationStatus, setLocationStatus] = useState("");
   const [locating, setLocating] = useState(false);
   const [satelliteError, setSatelliteError] = useState(false);
@@ -143,8 +162,7 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
       trackResize: false,
     });
     map.setMinZoom(overviewZoom(map));
-    if (initial && cityBounds.contains(point(initial))) map.setView(point(initial), 15);
-    else showCityOverview(map);
+    showCityOverview(map);
     mapRef.current = map;
     map.createPane("districts").style.zIndex = "425";
     const streetLabels = map.createPane("streetLabels");
@@ -171,7 +189,9 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
       afterSingleClick(event, () => handleTerrain({ latitude: latlng.lat, longitude: latlng.lng }));
     });
     function updateLabels() {
-      map.getContainer().classList.toggle("hide-district-labels", map.getZoom() >= 13.5);
+      const zoom = map.getZoom();
+      map.getContainer().classList.toggle("overview-district-labels", zoom < 11);
+      map.getContainer().classList.toggle("hide-district-labels", zoom >= 13.5);
     }
     map.on("zoomend", updateLabels);
     updateLabels();
@@ -303,31 +323,52 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !satellite || !online) return;
-    const imagery = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+    const imagery = L.tileLayer(satelliteTiles, {
       maxZoom: 18,
+      updateWhenZooming: false,
       attribution: '<a href="https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9">Imagen © Esri y colaboradores</a>',
     });
-    let loaded = false;
-    imagery.on("tileload", () => {
-      loaded = true;
+    const previews = satellitePreview(map);
+    let hasImagery = false;
+    let remainingPreviews = previews.length;
+    function showImagery() {
+      hasImagery = true;
       setSatelliteError(false);
-    });
-    imagery.on("loading", () => { loaded = false; });
-    imagery.on("load", () => { if (!loaded) setSatelliteError(true); });
-    imagery.addTo(map);
-    return () => { imagery.off(); imagery.remove(); };
+    }
+    function reportFailure() {
+      if (!hasImagery && remainingPreviews === 0 && !imagery.isLoading()) setSatelliteError(true);
+    }
+    for (const preview of previews) {
+      preview.on("load", showImagery);
+      preview.once("load error", () => { remainingPreviews -= 1; reportFailure(); });
+      preview.addTo(map);
+    }
+    imagery.on("tileload", showImagery).on("load", reportFailure).addTo(map);
+    return () => {
+      for (const tiles of [...previews, imagery]) {
+        tiles.off("load error tileload").remove();
+      }
+    };
   }, [online, satellite]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !satellite || !online || satelliteError) return;
-    setWorkerUrl("/maplibre-worker.mjs");
-    const options = { style: "/maps/nombres-calles.json", attributionControl: false as const, pane: "streetLabels" };
-    const labels = maplibreGL(options).addTo(map);
-    map.attributionControl.addAttribution("Nombres de calles: Esri y colaboradores");
+    let active = true;
+    let labels: L.Layer | undefined;
+    const attribution = "Nombres de calles: Esri y colaboradores";
+    Promise.all([import("maplibre-gl"), import("@maplibre/maplibre-gl-leaflet")]).then(([maplibre, plugin]) => {
+      if (!active) return;
+      maplibre.setWorkerUrl("/maplibre-worker.mjs");
+      const options = { style: "/maps/nombres-calles.json", attributionControl: false as const, pane: "streetLabels" };
+      labels = plugin.maplibreGL(options).addTo(map);
+      map.attributionControl.addAttribution(attribution);
+    }).catch(() => { /* Street labels are optional; retain the local district map. */ });
     return () => {
+      active = false;
+      if (!labels) return;
       labels.remove();
-      map.attributionControl.removeAttribution("Nombres de calles: Esri y colaboradores");
+      map.attributionControl.removeAttribution(attribution);
     };
   }, [online, satellite, satelliteError]);
 
@@ -384,20 +425,58 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !layer) return;
-    const overlay = L.imageOverlay("", map.getBounds(), { pane: "territory", opacity: 0.68, interactive: false, alt: layerNames[layer] });
+    const layerName = layerNames[layer];
+    let visible: { url: string; overlay: L.ImageOverlay } | undefined;
+    let pending: { url: string; overlay: L.ImageOverlay } | undefined;
+    let frame = 0;
+
+    function discardPending() {
+      if (!pending) return;
+      const { overlay } = pending;
+      pending = undefined;
+      overlay.off("load error").remove();
+      overlay.getElement()?.removeAttribute("src");
+    }
+
     function refresh() {
       if (!map) return;
-      overlay.setBounds(map.getBounds()).setUrl(`/api/territory?operation=map&layer=${layer}&${currentView(map)}`);
+      const bounds = map.getBounds();
+      const url = `/api/territory?operation=map&layer=${layer}&${currentView(map, bounds)}`;
+      if (pending?.url === url) return;
+      discardPending();
+      if (visible?.url === url) {
+        setOverlayError(false);
+        return;
+      }
+
+      // Each image must keep the geographic bounds used in its request.
+      const overlay = L.imageOverlay(url, bounds, { pane: "territory", opacity: 0, alt: layerName });
+      pending = { url, overlay };
+      overlay.once("load", () => {
+        pending = undefined;
+        overlay.off("error").setOpacity(0.68);
+        visible?.overlay.remove();
+        visible = { url, overlay };
+        setOverlayError(false);
+      });
+      overlay.once("error", () => {
+        discardPending();
+        setOverlayError(true);
+      });
+      overlay.addTo(map);
     }
-    overlay.on("error", () => setOverlayError(true));
-    overlay.on("load", () => setOverlayError(false));
-    refresh();
-    overlay.addTo(map);
-    map.on("moveend resize", refresh);
+    function scheduleRefresh() {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(refresh);
+    }
+
+    scheduleRefresh();
+    map.on("moveend resize", scheduleRefresh);
     return () => {
-      map.off("moveend resize", refresh);
-      overlay.off();
-      overlay.remove();
+      map.off("moveend resize", scheduleRefresh);
+      window.cancelAnimationFrame(frame);
+      discardPending();
+      visible?.overlay.remove();
     };
   }, [layer]);
 
@@ -464,10 +543,13 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
       <div className={overview ? "map-controls" : "mb-3 grid items-end gap-3 sm:grid-cols-2"}>
         <div className="map-district grid min-w-0 gap-1.5">
           <label className="map-control-label" htmlFor="district-selector"><Layers2 size={18} aria-hidden="true" /> Selecciona tu distrito</label>
-          <NativeSelect id="district-selector" value={district} aria-busy={!districtLayer && !districtError} disabled={!districts.length} onChange={(event) => focusDistrict(event.target.value)}>
-            <option value="">{districtLayer ? "Todo Cochabamba" : districtError ? "Distritos no disponibles" : "Cargando distritos…"}</option>
-            {districts.map((info) => <option key={info.codigo_distrito} value={info.codigo_distrito}>{info.nombre}</option>)}
-          </NativeSelect>
+          <div className="relative">
+            <NativeSelect id="district-selector" value={district} aria-busy={!districtLayer && !districtError} disabled={!districts.length} onChange={(event) => focusDistrict(event.target.value)}>
+              <option value="">{districtLayer ? "Todo Cochabamba" : districtError ? "Distritos no disponibles" : "Cargando distritos…"}</option>
+              {districts.map((info) => <option key={info.codigo_distrito} value={info.codigo_distrito}>{info.nombre}</option>)}
+            </NativeSelect>
+            {overview && <ChevronDown size={18} className="pointer-events-none absolute end-3.5 top-1/2 -translate-y-1/2 text-action forced-colors:hidden" aria-hidden="true" />}
+          </div>
         </div>
         {!overview && <div className="grid content-start gap-1">
           <label className="text-sm font-semibold" htmlFor="gamc-layer-selector">Capa GAMC</label>
@@ -479,7 +561,7 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
             {Object.entries(layerNames).map(([key, name]) => <option key={key} value={key}>{name}</option>)}
           </NativeSelect>
         </div>}
-        {overview && <Button type="button" onClick={locate} disabled={locating}><LocateFixed size={17} aria-hidden="true" /> Usar mi ubicación</Button>}
+        {overview && <Button type="button" variant="secondary" onClick={locate} disabled={locating}><LocateFixed size={17} aria-hidden="true" /> Usar mi ubicación</Button>}
         <div className="grid gap-2">
           {drawing ? (
             <div className="flex flex-wrap gap-2">

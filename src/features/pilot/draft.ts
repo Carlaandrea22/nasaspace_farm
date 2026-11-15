@@ -23,6 +23,7 @@ export type CropWater = {
   priority: string;
   waterSource: string;
   turnDate: string;
+  turnDepthMm?: number | null;
   intervalDays: number | null;
   volumeM3: number | null;
   currentCrop?: string;
@@ -49,6 +50,38 @@ export type PilotDraft = {
 };
 
 export type DraftPatch = Pick<PilotDraft, "parcel" | "cropWater">;
+
+export type ReportWater = {
+  location: Coordinates;
+  crop: string;
+  planting: string;
+  harvest: string;
+  turn: string;
+  depthMm: number | null;
+};
+
+export type ReportWaterSave = { reportWater: ReportWater; newParcel?: Pick<Parcel, "name" | "areaHa"> };
+
+export function cropWaterFromReport(previous: CropWater | undefined, parcel: Parcel, report: ReportWater): CropWater {
+  return {
+    firstCrop: "", firstPlanting: "", firstHarvest: "",
+    secondCrop: "", secondPlanting: "", secondHarvest: "",
+    priority: "", waterSource: "", intervalDays: null,
+    ...previous,
+    currentCrop: report.crop,
+    currentPlanting: report.planting,
+    currentHarvest: report.harvest,
+    turnDate: report.turn,
+    turnDepthMm: report.depthMm,
+    volumeM3: report.depthMm !== null && parcel.areaHa
+      ? report.depthMm * parcel.areaHa * 10
+      : null,
+    turnStatus: report.turn
+      ? previous?.turnDate === report.turn && previous.turnStatus === "Confirmado" ? "Confirmado" : "Previsto"
+      : "",
+    parcelKey: locationKey(parcel),
+  };
+}
 
 export function applyDraftPatch(draft: PilotDraft, patch: DraftPatch): PilotDraft {
   const previous = draft.cropWater;

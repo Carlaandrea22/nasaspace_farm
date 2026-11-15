@@ -8,7 +8,7 @@ import { addDays, dayDistance, availableWaterFraction, forecastBalance, moveTurn
 import { waterCrops, waterCropGroups, waterCropSource, waterRootSource, localCropSource } from './water-crops';
 import { formatDate, localDate, type Forecast } from '../operations/model';
 import { ForecastPanel, type ForecastAvailability } from '../operations/next-turn';
-import { locationKey, type CropWater, type Parcel } from './draft';
+import { cropWaterFromReport, type CropWater, type Parcel, type ReportWater } from './draft';
 import type { ParcelEvidence } from './parcel-decision';
 import type { ConsultationPhase } from './consultation-progress';
 import { WaterOutlook } from './water-outlook';
@@ -18,7 +18,13 @@ import type { IrrigationNotice } from './irrigation-notice';
 type WaterSettings = {crop:string;planting:string;harvest:string;turn:string;depth:number;pastTurn:string;pastDepth:number;initial:string;fraction:number;rainEfficiency:number;irrigationEfficiency:number};
 
 const n=(value:number)=>value.toLocaleString('es-BO',{maximumFractionDigits:1});
-export function WaterDecision({parcel,evidence,known,onCropKnown,onProgress}:{parcel:Parcel;evidence?:ParcelEvidence;known?:CropWater;onCropKnown?:(crop:CropWater)=>void;onProgress?:(phase:ConsultationPhase)=>void}) {
+export function WaterDecision({parcel,evidence,known,onCropKnown,onProgress,onSave,creatingParcel,parcelId}: {
+  parcel:Parcel; evidence?:ParcelEvidence; known?:CropWater;
+  onCropKnown?:(crop:CropWater)=>void; onProgress?:(phase:ConsultationPhase)=>void;
+  onSave?:(water:ReportWater)=>Promise<void>;
+  creatingParcel?:boolean;
+  parcelId?:string;
+}) {
   const [settings,setSettings]=useState<WaterSettings>();
   const [editedCrop,setEditedCrop]=useState<string>();
   const [forecast,setForecast]=useState<Forecast>();
@@ -28,15 +34,35 @@ export function WaterDecision({parcel,evidence,known,onCropKnown,onProgress}:{pa
   const [delayed,setDelayed]=useState(false);
   const [period,setPeriod]=useState<7|14>(7);
   const [notice,setNotice]=useState<IrrigationNotice|null>(null);
+  const [saveStatus, setSaveStatus] = useState<'idle'|'saving'|'saved'|'error'>('idle');
+  const saveLabel = creatingParcel ? 'Guardar parcela, cultivo y turno' : 'Guardar cultivo y turno';
   const today=localDate(new Date().toISOString());
   const formValues=settings;
   const selectedName=editedCrop??formValues?.crop??(known?.currentCrop&&waterCrops[known.currentCrop]?known.currentCrop:'');
   const selectedCrop=waterCrops[selectedName];
   const sameCrop=formValues?.crop===selectedName;
   const missingSoil=!!evidence&&!evidence.soil;
+  const plannedDate = known?.turnDate && known.turnDate >= today && !['Aplicado', 'Cancelado'].includes(known.turnStatus ?? '')
+    ? known.turnDate : '';
+  const plannedDepth = plannedDate ? known?.turnDepthMm ?? (known?.volumeM3 && parcel.areaHa ? known.volumeM3 / (parcel.areaHa * 10) : '') : '';
+  function reportValues({crop, planting, harvest, turn, depth}: WaterSettings): ReportWater {
+    return { location: { latitude: parcel.latitude, longitude: parcel.longitude }, crop, planting, harvest, turn, depthMm: turn ? depth : null };
+  }
+  async function saveWater(values: WaterSettings) {
+    if (!onSave || saveStatus === 'saving') return;
+    setSaveStatus('saving');
+    try {
+      await onSave(reportValues(values));
+      setSettings(values);
+      setSaveStatus('saved');
+    } catch {
+      setSaveStatus('error');
+    }
+  }
   function submit(event:SubmitEvent<HTMLFormElement>) {
     event.preventDefault();const data=new FormData(event.currentTarget);const read=(k:string)=>String(data.get(k)??'');
-    if(missingSoil)return;
+    const saving = event.nativeEvent.submitter?.getAttribute('value') === 'save';
+    if (saveStatus === 'saving' || (!saving && missingSoil)) return;
     const crop=read('crop'),planting=read('planting'),profile=waterCrops[crop];
     if(!profile||!planting)return setError('Elige el cultivo e indica la fecha para continuar.');
     if(profile.requiresEndDate&&!read('harvest'))return setError(profile.cutting?'Indica cuándo esperas hacer el próximo corte.':'Indica cuándo esperas cosechar. Puede ser una fecha aproximada.');
@@ -44,12 +70,18 @@ export function WaterDecision({parcel,evidence,known,onCropKnown,onProgress}:{pa
     if(planting>today||harvest<today||harvest<=planting)return setError(profile.cutting?'El último corte debe ser hoy o antes; el próximo corte debe ser después.':'La siembra debe ser hoy o antes y la cosecha todavía no debe haber pasado. Revisa las fechas.');
     const turn=read('turn'),depth=Number(read('depth')||0);
     if(Boolean(turn)!==(depth>0))return setError('Para incluir riego, indica fecha y cantidad. Puedes dejar ambos vacíos para evaluar sin riego.');
+    if (turn && turn > harvest) return setError('El turno debe ser el día de la cosecha o antes.');
     const pastTurn=read('pastTurn'),pastDepth=Number(read('pastDepth')||0);
     if(Boolean(pastTurn)!==(pastDepth>0))return setError('Completa fecha y cantidad del riego pasado, o deja ambos vacíos.');
-    setSettings({crop,planting,harvest,turn,depth,pastTurn,pastDepth,initial:read('initial'),fraction:Number(read('fraction'))/100,
-      rainEfficiency:Number(read('rainEfficiency'))/100,irrigationEfficiency:Number(read('irrigationEfficiency'))/100});
-    onCropKnown?.({firstCrop:'',firstPlanting:'',firstHarvest:'',secondCrop:'',secondPlanting:'',secondHarvest:'',priority:'',waterSource:'',intervalDays:null,volumeM3:null,
-      ...known,currentCrop:crop,currentPlanting:planting,currentHarvest:harvest,turnDate:turn,turnStatus:turn?'Previsto':'',parcelKey:locationKey(parcel)});
+    const values = {crop,planting,harvest,turn,depth,pastTurn,pastDepth,initial:read('initial'),fraction:Number(read('fraction'))/100,
+      rainEfficiency:Number(read('rainEfficiency'))/100,irrigationEfficiency:Number(read('irrigationEfficiency'))/100};
+    if (saving) {
+      setError('');
+      void saveWater(values);
+      return;
+    }
+    setSettings(values);
+    onCropKnown?.(cropWaterFromReport(known, parcel, reportValues(values)));
     setEdit(false);setError('');setDelayed(false);
   }
   const profile=settings&&waterCrops[settings.crop];
@@ -69,21 +101,25 @@ export function WaterDecision({parcel,evidence,known,onCropKnown,onProgress}:{pa
   const turns:Turn[]=settings?.turn?[{id:'next',date:settings.turn,grossMm:settings.depth}]:[];
   const calculate=(delay:number)=>settings&&profile&&soil&&days?.[0]?.date===today&&initial!=null&&forecast?.today===today ?forecastBalance({days,soil:soil.profile,crop:profile,planting:settings.planting,harvest:settings.harvest,
     initialFraction:initial,turns:moveTurn(turns,'next',delay),rainEfficiency:settings.rainEfficiency,irrigationEfficiency:settings.irrigationEfficiency}):null;
-  const baseline=calculate(0),result=delayed?calculate(5):baseline;
+  const baseline = calculate(0);
+  const turnInWindow = Boolean(settings?.turn && days?.some(({ date }) => date === settings.turn));
+  const compareDelay = delayed && turnInWindow;
+  const result = compareDelay ? calculate(5) : baseline;
+  const scenarioTurn = settings?.turn ? addDays(settings.turn, compareDelay ? 5 : 0) : "";
+  const scenarioHasTurn = Boolean(scenarioTurn && days?.some(({ date }) => date === scenarioTurn));
   const phase:ConsultationPhase=edit?'editing':result?'complete':'pending';
   useEffect(()=>{onProgress?.(phase);},[phase,onProgress]);
   const partial=!!days&&days.length<period&&settings&&settings.harvest>=addDays(today,period-1);
   const forecastFailed=forecastAvailability==='unavailable'||forecastAvailability==='cached';
   const moisturePending=Boolean(soil)&&evidence?.moisture===undefined&&initial==null;
   const severity=result?.stressDays?'Revisa la humedad antes del próximo riego':result?'Sin señal de falta de agua en el escenario':forecastFailed?'No pudimos actualizar el pronóstico':!forecast||moisturePending?'Preparando tu consulta…':'Faltan datos para completar la consulta';
-  const cropWater:CropWater|undefined=settings?{...known,firstCrop:'',firstPlanting:'',firstHarvest:'',secondCrop:'',secondPlanting:'',secondHarvest:'',priority:'',waterSource:'',intervalDays:null,volumeM3:null,
-    currentCrop:settings.crop,currentPlanting:settings.planting,currentHarvest:settings.harvest,turnDate:settings.turn,turnStatus:settings.turn?'Previsto':'',parcelKey:locationKey(parcel)}:known;
+  const cropWater=settings?cropWaterFromReport(known, parcel, reportValues(settings)):known;
   const action=result?.firstStress?`Revisa si la tierra está húmeda donde llegan las raíces. El cálculo muestra posible falta de agua desde el ${formatDate(result.firstStress)}; confirma la fecha del riego con quien te entrega el agua.`:'El cálculo no muestra falta de agua con estos datos. Revisa la humedad de la tierra antes de cambiar la fecha del riego.';
   function previewNotice(){
     if(!settings||!result||!forecast||!soil||initial==null)return;
     setNotice({issuedAt:new Date().toISOString(),queriedAt:forecast.queriedAt,latitude:parcel.latitude,longitude:parcel.longitude,areaHa:parcel.areaHa,
       crop:settings.crop,planting:settings.planting,harvest:settings.harvest,requestedDays:period,rainMm:result.rainMm,demandMm:result.demandMm,stressDays:result.stressDays,firstStress:result.firstStress,
-      irrigationDate:settings.turn?addDays(settings.turn,delayed?5:0):'',irrigationMm:settings.depth,delayed,action,
+      irrigationDate:scenarioTurn,irrigationMm:settings.depth,delayed:compareDelay,action,
       soilSource:`${soil.source}${soil.distanceM>0?` (referencia a ${soil.distanceM} m del punto)`:''}`,
       moistureSource:settings.initial==='scenario'?'Supuesto elegido por el usuario':smap?`NASA SMAP L4 vía POWER (${smap.date}), actualizado mediante balance`:'Modelo Open-Meteo (0-81 cm)',
       rainEfficiency:settings.rainEfficiency,irrigationEfficiency:settings.irrigationEfficiency,initialFraction:initial,
@@ -91,7 +127,8 @@ export function WaterDecision({parcel,evidence,known,onCropKnown,onProgress}:{pa
   }
   return <div className="grid gap-4">
     <div><h2 className="text-2xl font-bold">¿Le alcanzará el agua a tu cultivo?</h2><p className="mt-1 text-sm text-muted">Cuéntanos qué tienes sembrado. Revisaremos la lluvia prevista y el agua que podría necesitar.</p></div>
-    {edit?<form key={known?.currentCrop??'new'} onSubmit={submit} className="grid gap-5 rounded-3xl bg-leaf/35 p-4 sm:p-6 consulta-no-imprimir">
+    {edit?<form onSubmit={submit} onChange={() => { if (saveStatus !== 'saving') setSaveStatus('idle'); }} className="rounded-3xl bg-leaf/35 p-4 sm:p-6 consulta-no-imprimir">
+      <fieldset disabled={saveStatus === 'saving'} className="grid min-w-0 gap-5">
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="grid content-start gap-2 text-sm font-semibold"><span className="flex items-center gap-2"><Sprout size={20} aria-hidden="true"/>¿Qué estás cultivando?</span><NativeSelect name="crop" value={selectedName} onChange={e=>{setEditedCrop(e.target.value);setError('');}} required><option value="" disabled>Selecciona tu cultivo</option>{waterCropGroups.map(group=><optgroup key={group} label={group}>{Object.values(waterCrops).filter(c=>c.group===group).map(c=><option key={c.name}>{c.name}</option>)}</optgroup>)}</NativeSelect></label>
         <label className="grid content-start gap-2 text-sm font-semibold"><span className="flex items-center gap-2"><CalendarDays size={20} aria-hidden="true"/>{selectedCrop?.cutting?'¿Cuándo fue el último corte?':'¿Cuándo lo sembraste?'}</span><Input key={selectedName} name="planting" type="date" defaultValue={sameCrop?formValues.planting:known?.currentCrop===selectedName?known.currentPlanting:''} max={today} required/></label>
@@ -102,8 +139,8 @@ export function WaterDecision({parcel,evidence,known,onCropKnown,onProgress}:{pa
         <summary className="cursor-pointer font-semibold">¿Vas a regar? Agrega la fecha y la cantidad</summary>
         <p className="mt-2 text-sm text-muted">Es opcional. Si no sabes cuánto regarás, deja ambos campos vacíos: veremos qué pasaría sin agregar riego.</p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <label className="grid content-start gap-2 text-sm font-semibold">¿Qué día vas a regar?<Input name="turn" type="date" min={today} defaultValue={formValues?.turn??((known?.turnDate??'')>=today?known?.turnDate:'')}/></label>
-          <label className="grid content-start gap-2 text-sm font-semibold">¿Cuánta agua aplicarás? (litros por m²)<Input name="depth" type="number" min="0" max="500" step="any" placeholder="Ej.: 30" defaultValue={formValues?.depth??(known?.volumeM3&&parcel.areaHa?known.volumeM3/(parcel.areaHa*10):'')}/><small className="font-normal text-muted">La cantidad por cada metro cuadrado, no el total del terreno. Si te la indican en mm, escribe el mismo número: 1 mm = 1 litro por m².</small></label>
+          <label className="grid content-start gap-2 text-sm font-semibold">¿Qué día vas a regar?<Input name="turn" type="date" min={today} defaultValue={formValues?.turn??plannedDate}/></label>
+          <label className="grid content-start gap-2 text-sm font-semibold">¿Cuánta agua aplicarás? (litros por m²)<Input name="depth" type="number" min="0" max="500" step="any" placeholder="Ej.: 30" defaultValue={formValues?.depth??plannedDepth}/><small className="font-normal text-muted">La cantidad por cada metro cuadrado, no el total del terreno. Si te la indican en mm, escribe el mismo número: 1 mm = 1 litro por m².</small></label>
         </div>
         <details className="mt-4 rounded-xl bg-leaf/30 p-3">
           <summary className="cursor-pointer text-sm font-semibold">¿Ya regaste en los últimos días?</summary>
@@ -129,8 +166,19 @@ export function WaterDecision({parcel,evidence,known,onCropKnown,onProgress}:{pa
         </details>
       </details>
       {error&&<p role="alert">{error}</p>}
-      {missingSoil?<p className="rounded-2xl bg-white/75 p-3 text-sm">Puedes ver las próximas lluvias más abajo. La estimación de agua de tu cultivo estará disponible cuando tengamos información del suelo.</p>:<Button type="submit" disabled={!evidence} className="w-full sm:w-auto sm:justify-self-start"><Droplets size={18} aria-hidden="true"/>{evidence?'Ver cómo estará el agua':'Cargando datos del terreno…'}</Button>}
-    </form>:<Button variant="secondary" className="consulta-no-imprimir justify-self-start" onClick={()=>setEdit(true)}>Cambiar cultivo o riego</Button>}
+      {missingSoil && <p className="rounded-2xl bg-white/75 p-3 text-sm">Puedes ver las próximas lluvias más abajo. La estimación de agua de tu cultivo estará disponible cuando tengamos información del suelo.</p>}
+      <div className="flex flex-wrap gap-2">
+        {!missingSoil && <Button type="submit" disabled={!evidence || saveStatus === 'saving'}><Droplets size={18} aria-hidden="true"/>{evidence?'Ver cómo estará el agua':'Cargando datos del terreno…'}</Button>}
+        {onSave && <Button type="submit" value="save" variant="secondary" disabled={saveStatus === 'saving' || saveStatus === 'saved'}>{saveStatus === 'saving' ? 'Guardando…' : saveLabel}</Button>}
+      </div>
+      </fieldset>
+    </form>:<div className="consulta-no-imprimir flex flex-wrap gap-2">
+      <Button variant="secondary" disabled={saveStatus === 'saving'} onClick={()=>setEdit(true)}>Cambiar cultivo o riego</Button>
+      {onSave && settings && <Button type="button" disabled={saveStatus === 'saving' || saveStatus === 'saved'} onClick={() => void saveWater(settings)}>{saveStatus === 'saving' ? 'Guardando…' : saveLabel}</Button>}
+      {onSave && compareDelay && <p className="w-full text-sm text-muted">Se guarda la fecha de riego indicada. El retraso es una simulación.</p>}
+    </div>}
+    {saveStatus === 'saved' && <p role="status" className="consulta-no-imprimir font-semibold">Cultivo y turno guardados en tu cuenta</p>}
+    {saveStatus === 'error' && <p role="alert" className="consulta-no-imprimir text-sm text-red-800">No pudimos guardar. Revisa la conexión y que la parcela siga en tu cuenta. Tus datos siguen aquí.</p>}
     {settings&&!edit&&<section className="rounded-2xl bg-leaf/50 p-4 sm:p-6" aria-live="polite">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-xl font-bold">{severity}</h3>
@@ -144,7 +192,9 @@ export function WaterDecision({parcel,evidence,known,onCropKnown,onProgress}:{pa
         {partial&&<p className="mt-2 font-semibold">Pronóstico parcial: hay {result.rows.length} de {period} días disponibles.</p>}
         <p className="mb-2 text-sm text-muted">1 mm equivale a 1 litro de agua por m². El agua que necesita el cultivo puede venir de la lluvia, del suelo y del riego.</p>
         {result.stressDays>0&&result.rainMm>=result.demandMm&&<p className="mb-2 text-sm">Aunque la lluvia total parece suficiente, también importa cuándo llueve y cuánta agua puede guardar el suelo. Por eso pueden aparecer días con falta de agua.</p>}
-        <p className="text-sm">Estimación para orientarte, no una medición en tu terreno. {settings.turn?`Incluye el riego ${delayed?'retrasado':'indicado'} para el ${formatDate(addDays(settings.turn,delayed?5:0))}.`:'No incluye riegos futuros: solo la lluvia prevista.'}</p>
+        <p className="text-sm">Estimación para orientarte, no una medición en tu terreno. {scenarioHasTurn
+          ? `Incluye el riego ${compareDelay ? 'retrasado' : 'indicado'} para el ${formatDate(scenarioTurn)}.`
+          : scenarioTurn ? `El turno del ${formatDate(scenarioTurn)} queda fuera de los días analizados.` : 'No incluye riegos futuros: solo la lluvia prevista.'}</p>
         <details className="mt-4 text-sm"><summary className="cursor-pointer font-semibold">Cómo hicimos esta estimación</summary><div className="mt-3 space-y-2">
         <p className="text-sm">Humedad inicial: {settings.initial==='scenario'?'supuesto elegido':smap?`SMAP L4 vía POWER · promedio UTC ${smap.date}, actualizado con ${warmup.length} días de balance hasta hoy. Producto regional en revisión, no medición de campo`:'modelo Open-Meteo (0–81 cm), no observación SMAP'} · {n((initial??0)*100)} % del agua disponible. Lluvia aprovechable {n(settings.rainEfficiency*100)} %, eficiencia de riego {n(settings.irrigationEfficiency*100)} %: supuestos editables.</p>
         {smap&&settings.initial!=='scenario'&&<p className="mt-2 text-sm">{settings.pastTurn?`Riego pasado incluido: ${settings.pastDepth} mm el ${settings.pastTurn}.`:'No se incluyó riego desde la observación SMAP.'} La media diaria UTC se toma como aproximación al inicio del siguiente día local; puede existir diferencia por el horario de la lluvia.</p>}
@@ -152,7 +202,7 @@ export function WaterDecision({parcel,evidence,known,onCropKnown,onProgress}:{pa
         <p>{profile?.note} El desarrollo del cultivo se aproxima por etapas según las fechas indicadas. Los coeficientes FAO son referencias; no están calibrados para cada variedad o terreno.</p>
         <p><a className="underline" href={waterCropSource} target="_blank" rel="noreferrer">Consumo de agua · FAO-56</a> · <a className="underline" href={waterRootSource} target="_blank" rel="noreferrer">Raíces y suelo · FAO-56</a> · <a className="underline" href={localCropSource} target="_blank" rel="noreferrer">Cultivos de los valles · Agrecol Andes</a></p>
         </div></details>
-        {!!turns.length&&<div className="mt-3"><Button variant="secondary" aria-pressed={delayed} className="consulta-no-imprimir" onClick={()=>setDelayed(v=>!v)}>{delayed?'Ver riego sin retraso':'¿Qué pasa si riego 5 días después?'}</Button><p className="mt-2 text-sm">Escenario: {delayed?'riego retrasado 5 días':'riego sin retraso'}. {delayed&&baseline?`${result.stressDays-baseline.stressDays} días adicionales con estrés respecto al riego sin retraso.`:''}</p></div>}
+        {turnInWindow && <div className="mt-3"><Button variant="secondary" aria-pressed={compareDelay} className="consulta-no-imprimir" onClick={()=>setDelayed(v=>!v)}>{compareDelay?'Ver riego sin retraso':'¿Qué pasa si riego 5 días después?'}</Button><p className="mt-2 text-sm">Escenario: {compareDelay?'riego retrasado 5 días':'riego sin retraso'}. {compareDelay&&baseline?`${result.stressDays-baseline.stressDays} días adicionales con estrés respecto al riego sin retraso.`:''}</p></div>}
         {result.excessMm>0&&<p className="mt-3 text-sm">El modelo calcula {n(result.excessMm)} mm por encima de la capacidad de retención. Puede perderse por drenaje o escorrentía; no confirma anegamiento ni desborde de canales.</p>}
         <details className="mt-4"><summary className="cursor-pointer font-semibold">Ver balance diario</summary><div className="mt-2 overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr><th>Fecha</th><th>Lluvia útil</th><th>Riego útil</th><th>Demanda</th><th>Agua restante</th><th>Estado</th></tr></thead><tbody>{result.rows.map(r=><tr key={r.date}><td className="py-2">{r.date}</td><td>{n(r.rainMm)} mm</td><td>{n(r.irrigationMm)} mm</td><td>{n(r.potentialEtMm)} mm</td><td>{n(r.storageMm)} mm</td><td>{r.stressed?'Revisar':'Sin señal'}</td></tr>)}</tbody></table></div></details>
         <Button variant="secondary" className="mt-4 consulta-no-imprimir" onClick={previewNotice}><FileText size={19} aria-hidden="true"/>Ver aviso para coordinar el riego</Button>
@@ -160,6 +210,6 @@ export function WaterDecision({parcel,evidence,known,onCropKnown,onProgress}:{pa
       </>:<p className="mt-2">{!evidence?'Buscando información del suelo…':!soil?'Nos faltan datos del suelo para estimar el agua de tu cultivo. Puedes consultar las próximas lluvias.':forecastFailed?'Tus datos siguen aquí. Pulsa «Actualizar pronóstico» más abajo para volver a intentarlo.':!forecast?'Consultando las próximas lluvias. El resultado aparecerá aquí.':moisturePending?'Consultando la humedad del suelo de hoy…':initial==null?'Nos falta el dato de humedad de hoy. En los ajustes puedes probar una cantidad de agua inicial como ejemplo.':'Faltan datos de algunos días; todavía no podemos completar la estimación.'}</p>}
     </section>}
     {notice&&<IrrigationNoticeDialog data={notice} onClose={()=>setNotice(null)}/>}
-    <details id="pronostico-agua" open={missingSoil||forecastFailed} className="min-w-0 scroll-mt-24 rounded-2xl bg-white/70 p-4"><summary className="cursor-pointer font-semibold">Ver lluvias y temperatura de los próximos días</summary><div className="mt-4"><ForecastPanel parcel={parcel} cropWater={cropWater} harvest={settings?.harvest} profile={profile} onForecast={setForecast} onAvailability={setForecastAvailability} period={period} onPeriodChange={setPeriod} consultation/></div></details>
+    <details id="pronostico-agua" open={missingSoil||forecastFailed} className="min-w-0 scroll-mt-24 rounded-2xl bg-white/70 p-4"><summary className="cursor-pointer font-semibold">Ver lluvias y temperatura de los próximos días</summary><div className="mt-4"><ForecastPanel parcel={parcel} parcelId={parcelId} cropWater={cropWater} harvest={settings?.harvest} profile={profile} onForecast={setForecast} onAvailability={setForecastAvailability} period={period} onPeriodChange={setPeriod} showPeriod={edit} consultation/></div></details>
   </div>;
 }
