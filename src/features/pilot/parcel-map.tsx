@@ -4,8 +4,8 @@ import type { FeatureCollection, GeoJsonObject, MultiPolygon, Polygon } from "ge
 import * as L from "leaflet";
 import { maplibreGL } from "@maplibre/maplibre-gl-leaflet";
 import { setWorkerUrl } from "maplibre-gl";
-import { LocateFixed, Map as MapIcon } from "lucide-react";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { LocateFixed, Map as MapIcon, MapPin } from "lucide-react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
 import { NativeSelect } from "../../components/ui/native-select";
 import { getReferenceCase } from "../territory/reference";
@@ -17,8 +17,8 @@ import "maplibre-gl/dist/maplibre-gl.css";
 
 const recorteTunari = [[-17.349, -66.166], [-17.332, -66.143]];
 const city: L.LatLngTuple = [-17.3936, -66.1569];
-const cityOverviewZoom = 11.5;
 const cityBounds = L.latLngBounds([-17.59, -66.31], [-17.23, -66.01]);
+const overviewOptions = { padding: L.point(19, 19), animate: false };
 const primaryDistricts = new Set(["9", "13", "15"]);
 const outlineCorners = 4;
 const clickDelayMs = 500;
@@ -98,31 +98,30 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
   const latitude = selected?.latitude;
   const longitude = selected?.longitude;
 
-  function cancelMapClick() {
+  const cancelMapClick = useCallback(() => {
     window.clearTimeout(pendingClick.current);
     pendingClick.current = undefined;
-  }
+  }, []);
 
-  function afterSingleClick(event: L.LeafletMouseEvent, action: () => void) {
+  const afterSingleClick = useCallback((event: L.LeafletMouseEvent, action: () => void) => {
     cancelMapClick();
     if ((event.originalEvent as MouseEvent).detail > 1) return;
     pendingClick.current = window.setTimeout(action, clickDelayMs);
-  }
+  }, [cancelMapClick]);
 
   useEffect(() => {
     if (!container.current) return;
     const initial = initialPoint();
     const map = L.map(container.current, {
-      maxBounds: cityBounds,
-      maxBoundsViscosity: 1,
       zoomSnap: 0.25,
-      minZoom: cityOverviewZoom,
+      minZoom: 8,
       maxZoom: 18,
       scrollWheelZoom: false,
       zoomAnimation: false,
       markerZoomAnimation: false,
       zoomControl: false,
-    }).setView(overview || !initial ? city : point(initial), overview || !initial ? cityOverviewZoom : 15);
+    }).setView(initial ? point(initial) : city, initial ? 15 : 12);
+    if (!initial) map.fitBounds(cityBounds, overviewOptions);
     mapRef.current = map;
     map.createPane("districts").style.zIndex = "425";
     const streetLabels = map.createPane("streetLabels");
@@ -171,7 +170,7 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
       mapRef.current = null;
       map.remove();
     };
-  }, []);
+  }, [afterSingleClick, cancelMapClick]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -222,12 +221,13 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
       controller.abort();
       districtsOnMap?.remove();
     };
-  }, [showDistricts]);
+  }, [afterSingleClick, showDistricts]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     const points = (drawing ? vertices : outline ?? []).map(point);
+    if (!points.length) return;
     const style = { pane: "parcel-point", interactive: false, color: "#f8ffe9", weight: 3,
       fillColor: "#a7d861", fillOpacity: 0.35 };
     const shape = points.length >= 3 ? L.polygon(points, style) : L.polyline(points, style);
@@ -377,7 +377,7 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
     manualAction.current += 1;
     const bounds = districtBounds.current.get(code);
     if (bounds) map.fitBounds(bounds, { padding: [24, 24], maxZoom: 16, animate: false });
-    else map.setView(city, cityOverviewZoom, { animate: false });
+    else map.fitBounds(cityBounds, overviewOptions);
   }
 
   function locatePlace(coords: Coordinates) {
@@ -479,6 +479,14 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
             setSatelliteError(false);
             setSatellite(event.target.checked);
           }} /> Satélite</label>
+          <Button type="button" variant="secondary" className="sm:ml-auto" onClick={() => {
+            setShowDistricts(true);
+            focusDistrict("");
+          }}><MapIcon size={17} aria-hidden="true" /> Ver todos los distritos</Button>
+          <Button type="button" variant="secondary" onClick={() => {
+            const center = mapRef.current?.getCenter();
+            if (center) onSelect({ latitude: center.lat, longitude: center.lng });
+          }}><MapPin size={17} aria-hidden="true" /> Marcar centro</Button>
         </div>
         {districtError && showDistricts && <p role="status" className="mt-2 text-sm text-muted">No se pudieron cargar los distritos de referencia.</p>}
         {satellite && (!online || satelliteError) && <p role="status" className="mt-2 text-sm text-muted">Imágenes satelitales no disponibles. El mapa local sigue activo.</p>}

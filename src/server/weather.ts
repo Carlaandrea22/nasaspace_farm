@@ -1,5 +1,5 @@
 import earlyData from "../data/imerg-early.json";
-import { timeZone, toForecast } from "../features/operations/model";
+import { forecastHorizonDays, timeZone, toForecast } from "../features/operations/model";
 
 type Point = { latitude: number; longitude: number };
 
@@ -22,7 +22,7 @@ export async function readWeather(point: Point) {
     daily: "precipitation_sum,et0_fao_evapotranspiration,temperature_2m_min,temperature_2m_max,relative_humidity_2m_mean",
     timezone: timeZone,
     past_days: "3",
-    forecast_days: "14",
+    forecast_days: String(forecastHorizonDays),
   }).toString();
   const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(9000) });
   if (!response.ok) throw new Error("Open-Meteo no está disponible");

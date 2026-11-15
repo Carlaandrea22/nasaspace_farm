@@ -8,12 +8,12 @@ const layer = z.object({
   status: z.enum(["unique", "ambiguous", "no-match", "unavailable"]),
   matches: z.array(territoryMatch).max(50),
 });
+const coordinates = z.object({ latitude: z.number().min(-90).max(90), longitude: z.number().min(-180).max(180) });
 
-const parcel = z.object({
+const parcel = coordinates.extend({
   name: z.string().max(100),
-  latitude: z.number().min(-90).max(90),
-  longitude: z.number().min(-180).max(180),
   areaHa: positive,
+  outline: z.array(coordinates).length(4).optional(),
   territory: z.object({
     source: z.literal("GAMC · Proyecto 04"), queriedAt: text,
     district: layer, periurban: layer, drainage: layer,

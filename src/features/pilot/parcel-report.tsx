@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ArrowLeft, ChevronRight, Map, MapPin, Printer, Scan, Sprout } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
@@ -8,9 +9,27 @@ import { ParcelClimate } from "../climate/parcel-climate";
 import { getReferenceCase } from "../territory/reference";
 import { TerritorySummary } from "../territory/summary";
 import type { Territory } from "../territory/types";
-import type { Coordinates } from "./draft";
+import { coordinates, decimal, type Coordinates } from "./draft";
 
-export function ParcelReport({ point, parcel, area, view }: {
+export function ParcelReportQuery() {
+  const params = useSearchParams();
+  const point = coordinates(params.get("lat") ?? "", params.get("lon") ?? "");
+  if (!point) return <section className="panel">
+    <h1>Selecciona una ubicación</h1>
+    <p>Marca un punto o dibuja una parcela para abrir su informe.</p>
+    <Link href="/" className="mt-3 inline-block underline">Volver al mapa</Link>
+  </section>;
+  const area = decimal(params.get("area") ?? "");
+  const view = new URLSearchParams();
+  for (const field of ["bbox", "width", "height"]) {
+    const value = params.get(field);
+    if (value) view.set(field, value);
+  }
+  return <ParcelReport key={params.toString()} point={point} parcel={params.get("tipo") === "parcela"}
+    area={area > 0 ? area : null} view={view.toString()} />;
+}
+
+function ParcelReport({ point, parcel, area, view }: {
   point: Coordinates; parcel: boolean; area: number | null; view: string;
 }) {
   const [attempt, setAttempt] = useState(0);

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { hasEnsoCoverage, relevantEnso } from "../src/domain/climate/enso.ts";
 import { assessTemperature, rankCrops, summarizeClimate } from "../src/domain/climate/screening.ts";
-import { heatSignals } from "../src/features/operations/model.ts";
+import * as weather from "../src/features/operations/model.ts";
 
 const dayMs = 86_400_000;
 const profile = { code: "1232", name: "Cebada", species: "Hordeum vulgare", use: "forraje", days: 90, cycleRange: [80, 100], temperature: [2, 15, 20, 40], rainfall: [200, 500, 1000, 2000], optimalPh: [6.5, 7.5] };
@@ -61,5 +61,19 @@ test("el aviso de calor usa la máxima a tres días y omite datos ausentes", () 
     { date: "2026-11-16", maximum: null },
     { date: "2026-11-17", maximum: 40 },
   ] };
-  assert.deepEqual(heatSignals(forecast).map(({ date }) => date), ["2026-11-15"]);
+  assert.deepEqual(weather.heatSignals(forecast).map(({ date }) => date), ["2026-11-15"]);
+});
+
+test("la ventana térmica de siembra termina antes de un extremo, un hueco o el fin del horizonte", () => {
+  const days = [
+    { date: "2026-11-30", minimum: 5, maximum: 23 },
+    { date: "2026-12-01", minimum: 2, maximum: 40 },
+    { date: "2026-12-02", minimum: null, maximum: 25 },
+    { date: "2026-12-03", minimum: 1, maximum: 24 },
+    { date: "2026-12-04", minimum: 10, maximum: 24 },
+    { date: "2026-12-06", minimum: 10, maximum: 24 },
+  ];
+  assert.deepEqual(weather.plantingTemperatureWindow(days, "2026-11-30", profile.temperature), { start: "2026-11-30", end: "2026-12-01" });
+  assert.deepEqual(weather.plantingTemperatureWindow(days, "2026-12-02", profile.temperature), { start: "2026-12-04", end: "2026-12-04" });
+  assert.equal(weather.plantingTemperatureWindow(days, "2026-12-07", profile.temperature), null);
 });

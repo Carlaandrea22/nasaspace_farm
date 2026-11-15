@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Calculator, CalendarDays, Check, ChevronRight, CloudRain, Droplets, Info, Layers, Leaf, SlidersHorizontal, ThermometerSun, Wheat, X } from "lucide-react";
+import { ArrowRight, Calculator, CalendarDays, Check, ChevronRight, CloudRain, Droplets, Info, Layers, Leaf, ThermometerSun, Wheat, X } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "../../components/ui/button";
@@ -8,7 +8,7 @@ import { Input } from "../../components/ui/input";
 import { NativeSelect } from "../../components/ui/native-select";
 import { ensoSource, hasEnsoCoverage, relevantEnso } from "../../domain/climate/enso";
 import { ecocropSource, powerSource, rankCrops, type ClimateProfile, type CropUse } from "../../domain/climate/screening";
-import { localDate } from "../operations/model";
+import { addDays, forecastHorizonDays, forecastSource, formatDate, localDate, plantingTemperatureWindow, type Forecast } from "../operations/model";
 import { decimal, type Coordinates } from "../pilot/draft";
 import { EnsoAttribution, labelMonth, seasonLabel, useEnso } from "./enso-outlook";
 
@@ -19,23 +19,19 @@ function metric(value: number | null, unit: string) {
   return value === null ? "Sin dato" : `${number.format(value)} ${unit}`;
 }
 
-function monthOptions() {
-  const [year, month] = localDate(new Date().toISOString()).split("-").map(Number);
-  return Array.from({ length: 12 }, (_, index) => new Date(Date.UTC(year, month - 1 + index, 1)).toISOString().slice(0, 7));
-}
-
 export function ParcelClimate({ point, territory }: { point: Coordinates; territory: ReactNode }) {
   const params = new URLSearchParams({ lat: String(point.latitude), lon: String(point.longitude) }).toString();
   return <ClimatePanel key={params} params={params} territory={territory} />;
 }
 
 function ClimatePanel({ params, territory }: { params: string; territory: ReactNode }) {
-  const [months] = useState(monthOptions);
-  const [month, setMonth] = useState(months[0]);
+  const today = localDate(new Date().toISOString());
+  const [planting, setPlanting] = useState(today);
   const [use, setUse] = useState<CropUse | "">("");
   const [phText, setPhText] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<{ profile: ClimateProfile | null; cached: boolean }>();
+  const [forecast, setForecast] = useState<Forecast | null>();
   const season = useEnso();
 
   useEffect(() => {
@@ -55,22 +51,35 @@ function ClimatePanel({ params, territory }: { params: string; territory: ReactN
       } catch {}
       setState({ profile, cached: Boolean(profile) });
     });
+    fetch(`/api/weather?${params}`, { signal: controller.signal }).then(async (response) => {
+      if (!response.ok) throw new Error("Open-Meteo");
+      const weather = await response.json() as Forecast;
+      if (!controller.signal.aborted) setForecast(weather);
+    }).catch(() => {
+      if (!controller.signal.aborted) setForecast(null);
+    });
     return () => controller.abort();
   }, [params, attempt]);
 
   const profile = state?.profile;
+  const days = forecast?.today === today ? forecast.days : [];
+  const lastDate = days.at(-1)?.date ?? addDays(today, forecastHorizonDays - 1);
+  const dateValid = Boolean(planting && planting >= today && planting <= lastDate);
+  const month = planting.slice(0, 7);
   const index = Number(month.slice(5)) - 1;
-  const metrics = profile?.months[index];
+  const metrics = dateValid ? profile?.months[index] : undefined;
+  const weatherOnPlanting = dateValid ? days.find(({ date }) => date === planting) : undefined;
+  const hasTemperatures = days.some((day) => day.date >= planting && day.minimum != null && day.maximum != null);
   const ph = decimal(phText);
   const phValid = Number.isFinite(ph) && ph >= 0 && ph <= 14;
-  const crops = profile ? rankCrops(profile.crops[index], use, phValid ? ph : null) : null;
+  const crops = dateValid && profile ? rankCrops(profile.crops[index], use, phValid ? ph : null) : null;
   const eligibleCrops = crops?.filter((crop) => crop.eligible) ?? [];
   const noFavorableCrop = eligibleCrops.length > 0 && eligibleCrops.every((crop) =>
     crop.assessment && crop.assessment.category !== "recommended",
   );
   const cycleDays = Math.max(1, ...eligibleCrops.map((crop) => crop.days));
   const outlook = season?.outlook;
-  const signals = outlook ? relevantEnso(outlook, month, cycleDays) : [];
+  const signals = outlook ? relevantEnso(outlook, planting, cycleDays) : [];
   return (
     <>
     <section id="clima-parcela" aria-labelledby="climate-title" className="panel consulta-seccion consulta-clima scroll-mt-5">
@@ -79,12 +88,12 @@ function ClimatePanel({ params, territory }: { params: string; territory: ReactN
       {state && !profile && (
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <p role="status" className="text-sm text-muted">Historial no disponible para este punto. Puedes reintentar con conexión.</p>
-          <Button type="button" variant="secondary" onClick={() => { setState(undefined); setAttempt(attempt + 1); }}>Reintentar historial</Button>
+          <Button type="button" variant="secondary" onClick={() => { setState(undefined); setForecast(undefined); setAttempt(attempt + 1); }}>Reintentar historial</Button>
         </div>
       )}
-      {profile && metrics && crops && <>
+      {profile && metrics && <>
         <p className="mt-1 text-sm text-muted">
-          NASA POWER · {profile.from.slice(0, 4)}–{profile.to.slice(0, 4)} · tiempo solar local.
+          Historial de {labelMonth(month).split(" ")[0]} · NASA POWER · {profile.from.slice(0, 4)}–{profile.to.slice(0, 4)} · tiempo solar local.
           {state?.cached && <> Copia guardada el {profile.queriedAt.slice(0, 10)}.</>}
         </p>
           <dl className="consulta-indicadores my-4 grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-3 text-sm">
@@ -99,18 +108,13 @@ function ClimatePanel({ params, territory }: { params: string; territory: ReactN
     <section id="cultivos-parcela" className="panel consulta-seccion scroll-mt-5">
       <h2 className="consulta-titulo"><Leaf aria-hidden="true"/> ¿Qué puedes cultivar?</h2>
       <p className="mt-1 text-sm text-muted">Compara cómo les fue a estos cultivos con las temperaturas de otros años.</p>
-      {profile && crops ? <>
-        <p className="consulta-filtros-impresos mt-3 text-sm">
-          Siembra: {labelMonth(month)} · Destino: {use || "Cualquiera"}{phValid ? ` · pH: ${number.format(ph)}` : ""}
-        </p>
-        <details className="consulta-no-imprimir consulta-filtros mt-3">
-          <summary><SlidersHorizontal size={16} aria-hidden="true"/> Ajustar consulta · {labelMonth(month)}</summary>
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          <div>
-            <label htmlFor="planting-month" className="mb-1 block text-sm font-semibold">Mes previsto de siembra</label>
-            <NativeSelect id="planting-month" value={month} onChange={(event) => setMonth(event.target.value)}>
-              {months.map((option) => <option key={option} value={option}>{labelMonth(option)}</option>)}
-            </NativeSelect>
+      <fieldset className="consulta-no-imprimir consulta-filtros mt-3 min-w-0 px-3 pb-3 sm:px-4">
+        <legend className="px-1 font-semibold">Planifica tu siembra</legend>
+        <div className="grid gap-3 py-2 sm:grid-cols-3">
+          <div className="min-w-0">
+            <label htmlFor="planting-date" className="mb-1 block text-sm font-semibold">¿Cuándo quieres sembrar?</label>
+            <Input id="planting-date" type="date" min={today} max={lastDate} value={planting}
+              aria-invalid={!dateValid} aria-describedby="planting-date-help" onChange={(event) => setPlanting(event.target.value)} />
           </div>
           <div>
             <label htmlFor="climate-use" className="mb-1 block text-sm font-semibold">Destino de la cosecha</label>
@@ -122,13 +126,26 @@ function ClimatePanel({ params, territory }: { params: string; territory: ReactN
           </div>
           <div>
             <label htmlFor="climate-ph" className="mb-1 block text-sm font-semibold">pH medido (opcional)</label>
-            <Input id="climate-ph" inputMode="decimal" value={phText} aria-invalid={Boolean(phText) && !phValid} aria-describedby={phText && !phValid ? "climate-ph-error" : undefined} onChange={(event) => setPhText(event.target.value)} />
+            <Input id="climate-ph" inputMode="decimal" placeholder="Ej. 6,5" value={phText} aria-invalid={Boolean(phText) && !phValid} aria-describedby={phText && !phValid ? "climate-ph-error" : undefined} onChange={(event) => setPhText(event.target.value)} />
             {phText && !phValid && <p id="climate-ph-error" className="mt-1 text-xs text-red-800">Ingresa un pH entre 0 y 14.</p>}
           </div>
-          </div>
-        </details>
+        </div>
+        <p id="planting-date-help" aria-live="polite" className={`text-xs ${dateValid ? "text-muted" : "text-red-800"}`}>
+          {dateValid ? `Puedes elegir desde hoy hasta el ${formatDate(lastDate)}.` : `Elige una fecha entre hoy y el ${formatDate(lastDate)}.`}
+        </p>
+      </fieldset>
+      {dateValid && <div aria-live="polite" className="mt-4 text-sm text-muted">
+        {weatherOnPlanting ? <>
+          <p><strong className="text-ink">Pronóstico para el {formatDate(planting)}.</strong> Lluvia {metric(weatherOnPlanting.rain, "mm")} · mín. {metric(weatherOnPlanting.minimum, "°C")} · máx. {metric(weatherOnPlanting.maximum ?? null, "°C")}.</p>
+          <p className="mt-1">Antes de sembrar, revisa la lluvia y la humedad del suelo. <a className="underline" href={forecastSource}>Open-Meteo</a></p>
+        </> : <p>{forecast === undefined ? "Consultando el pronóstico local…" : "Pronóstico diario no disponible para esta fecha."}</p>}
+      </div>}
+      {profile && crops ? <>
+        <p className="consulta-filtros-impresos mt-3 text-sm">
+          Siembra: {formatDate(planting)} · Destino: {use || "Cualquiera"}{phValid ? ` · pH: ${number.format(ph)}` : ""}
+        </p>
         <div aria-live="polite" className="consulta-grupos">
-          {noFavorableCrop && <p className="consulta-aviso">Ningún cultivo evaluado tuvo condiciones de temperatura claramente favorables para este mes. Prueba otro mes de siembra.</p>}
+          {noFavorableCrop && <p className="consulta-aviso">Ninguna opción para el destino elegido tuvo un ajuste térmico favorable en este mes.</p>}
           {cropGroups.map(group => {
             const entries = crops.filter(crop => group.categories.includes(crop.eligible ? crop.assessment?.category ?? "unknown" : "excluded"));
             if (!entries.length) return null;
@@ -143,12 +160,14 @@ function ClimatePanel({ params, territory }: { params: string; territory: ReactN
                 </div>
               </div>
               <ul className="consulta-cultivos-lista">
-                {entries.map(crop => <CropCard key={crop.species} crop={crop}/>)}
+                {entries.map(crop => <CropCard key={crop.species} crop={crop}
+                  window={hasTemperatures && crop.eligible && crop.assessment && crop.assessment.category !== "unsuitable"
+                    ? plantingTemperatureWindow(days, planting, crop.temperature) : undefined} />)}
               </ul>
             </div>;
           })}
         </div>
-      </> : <p className="mt-3 text-sm text-muted">La comparación necesita el historial de temperatura.</p>}
+      </> : dateValid && <p className="mt-3 text-sm text-muted">La comparación necesita el historial de temperatura.</p>}
     </section>
     <section id="informacion-adicional" className="panel consulta-seccion scroll-mt-5">
       <h2 className="consulta-titulo"><Layers aria-hidden="true"/> Información adicional</h2>
@@ -159,7 +178,7 @@ function ClimatePanel({ params, territory }: { params: string; territory: ReactN
             {signals.length > 0 ? <>
               <p className="mt-2 text-muted">Probabilidad de la fase en el Pacífico. Para la parcela, revisa el pronóstico local de lluvia y temperatura.</p>
               <ul className="my-2 list-disc pl-5">{signals.map((signal) => <li key={signal.center}>{signal.phase} · {signal.probability}% en {seasonLabel(signal)}</li>)}</ul>
-            </> : <p className="mt-2 text-muted">{hasEnsoCoverage(outlook, month, cycleDays)
+            </> : <p className="mt-2 text-muted">{hasEnsoCoverage(outlook, planting, cycleDays)
               ? "El boletín no indica una señal de El Niño o La Niña por encima del umbral de seguimiento."
               : "El boletín aún no cubre la campaña elegida."}</p>}
             <EnsoAttribution outlook={outlook} cached={Boolean(season?.cached)} />
@@ -172,6 +191,7 @@ function ClimatePanel({ params, territory }: { params: string; territory: ReactN
           <summary><Calculator aria-hidden="true"/> <span>¿Cómo se calcula la aptitud?</span> <ChevronRight aria-hidden="true"/></summary>
           <p className="mt-1 text-muted">Simulamos una siembra el primer día del mes elegido en cada año del historial. Para cada cultivo usamos el punto medio del rango de días de <a href={ecocropSource} className="underline">FAO EcoCrop</a>. Contamos solo los ciclos que tienen una temperatura media para cada día y exigimos al menos tres ciclos completos.</p>
           <p className="mt-2 text-muted">La categoría resume cuántos ciclos cumplieron el criterio térmico. El orden considera el destino de la cosecha y el pH medido. La cuadrícula de <a href={powerSource} className="underline">NASA POWER</a> describe el clima regional. La lluvia, el suelo y el riego requieren revisión aparte.</p>
+          <p className="mt-2 text-muted">La ventana de siembra muestra la primera secuencia de días, a partir de la fecha elegida, con mínimas y máximas previstas dentro de los límites térmicos de EcoCrop.</p>
         </details>
         {territory}
       </div>
@@ -195,7 +215,7 @@ const cropPhotos: Readonly<Record<string, string>> = {
   "Zea mays": "/images/informe/maiz.webp",
 };
 
-function CropCard({ crop }: { crop: ReturnType<typeof rankCrops>[number] }) {
+function CropCard({ crop, window }: { crop: ReturnType<typeof rankCrops>[number]; window?: ReturnType<typeof plantingTemperatureWindow> }) {
   const labels = { recommended: "Favorable por temperatura", conditional: "Posible con reservas", unsuitable: "Poco favorable por temperatura" };
   const climateStatus = crop.assessment ? labels[crop.assessment.category] : "Datos insuficientes";
   return (
@@ -205,8 +225,12 @@ function CropCard({ crop }: { crop: ReturnType<typeof rankCrops>[number] }) {
       </div>}
       <div className="consulta-cultivo-contenido">
       <h4 className="flex items-center gap-2 font-bold"><Wheat size={19} aria-hidden="true"/>{crop.name}</h4>
-      <p className="text-xs text-muted">{crop.use === "forraje" ? "Forraje" : "Consumo"} · ciclo de referencia de {crop.days} días</p>
+      <p className="text-xs text-muted">{crop.use === "forraje" ? "Forraje" : "Consumo"} · {crop.cycleRange.join("–")} días estimados entre siembra y cosecha</p>
       <p className="consulta-aptitud" data-category={crop.assessment?.category}>{climateStatus}</p>
+      {window !== undefined && <p className="mt-2 rounded-lg bg-canvas p-2 text-xs font-semibold">
+        {window ? window.start === window.end ? `Temperatura compatible el ${formatDate(window.start)}.` : `Temperatura compatible del ${formatDate(window.start)} al ${formatDate(window.end)}.`
+          : "Sin una ventana de temperatura compatible en el pronóstico."}
+      </p>}
       <details className="consulta-cultivo-detalles text-xs text-muted">
         <summary>
           {crop.assessment && crop.samples > 0 && <span className="consulta-ciclos" aria-hidden="true">
@@ -227,7 +251,7 @@ function CropCard({ crop }: { crop: ReturnType<typeof rankCrops>[number] }) {
       <p className="mt-1 text-xs text-muted">Lluvia anual {crop.optimalRain === null ? "sin dato" : crop.optimalRain ? "en el rango óptimo" : "fuera del rango óptimo"}.</p>
       {crop.phMatch !== null && <p className="text-xs text-muted">pH medido {crop.phMatch ? "en el rango óptimo" : "fuera del rango óptimo"} ({crop.optimalPh.map((value) => number.format(value)).join("–")}).</p>}
       {crop.assessment &&
-        <p className="mt-1">EcoCrop estima {crop.cycleRange.join("–")} días. Entre todos los ciclos evaluados hubo {crop.assessment.optimal} de {crop.assessment.observations} días en el rango favorable y {crop.assessment.outside} fuera de los límites de {crop.temperature[0]}–{crop.temperature[3]} °C.</p>
+        <p className="mt-1">Para comparar usamos ciclos de {crop.days} días. Entre todos los ciclos evaluados hubo {crop.assessment.optimal} de {crop.assessment.observations} días en el rango favorable y {crop.assessment.outside} fuera de los límites de {crop.temperature[0]}–{crop.temperature[3]} °C.</p>
       }
       </details>
       </div>

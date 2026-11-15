@@ -49,6 +49,16 @@ test("cuenta de prueba guarda y recupera un borrador sin mezclar el modo invitad
     await page.getByRole("button", { name: "Copiar borrador a mi cuenta" }).click();
     await page.getByText("Guardado en tu cuenta").waitFor();
     assert.equal(await name(page).inputValue(), "Parcela invitada");
+    await page.getByRole("button", { name: "Abrir mapa" }).click();
+    const map = page.getByRole("region", { name: /Mapa de La Maica|Mapa de la parcela/ });
+    await map.locator(".leaflet-districts-pane path").first().waitFor({ state: "attached" });
+    await page.getByRole("button", { name: "Dibujar parcela" }).click();
+    const corners = [{ x: 90, y: 85 }, { x: 145, y: 85 }, { x: 145, y: 142 }, { x: 90, y: 142 }];
+    for (const [index, position] of corners.entries()) {
+      await map.click({ position });
+      await page.getByText(index === 3 ? "4 de 4 puntos · Contorno cerrado" : `${index + 1} de 4 puntos marcados`, { exact: true }).waitFor();
+    }
+    assert.match(await page.getByRole("link", { name: "Consultar esta parcela" }).getAttribute("href"), /tipo=parcela/);
     await name(page).fill("Parcela guardada en la cuenta");
     await page.getByRole("button", { name: "Guardar borrador" }).click();
     await page.getByText("Guardado en tu cuenta").waitFor();
@@ -63,6 +73,8 @@ test("cuenta de prueba guarda y recupera un borrador sin mezclar el modo invitad
     assert.equal((await other.request.get(origin + "/api/account-draft")).status(), 401);
     await signIn(other);
     assert.equal(await name(other).inputValue(), "Parcela guardada en la cuenta");
+    const saved = await (await other.request.get(origin + "/api/account-draft")).json();
+    assert.equal(saved.parcel.outline.length, 4);
     await other.getByRole("link", { name: "Ir a cultivo y agua" }).click();
     assert.equal(await other.getByLabel("Caudal (L/s)").inputValue(), "7");
 

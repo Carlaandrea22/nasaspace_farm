@@ -42,7 +42,7 @@ function CampaignFields({ label, prefix, crop, planting, harvest }: { label: str
       <Field label={`Cultivo de la ${label.toLowerCase()}`}><Choice name={`${prefix}Crop`} options={crops} value={crop} /></Field>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] gap-3">
         <Field label={`Siembra de la ${label.toLowerCase()}`}><Input name={`${prefix}Planting`} type="date" defaultValue={planting} /></Field>
-        <Field label={`Corte o cosecha de la ${label.toLowerCase()}`}><Input name={`${prefix}Harvest`} type="date" defaultValue={harvest} /></Field>
+        <Field label={`Fecha de cosecha de la ${label.toLowerCase()}`}><Input name={`${prefix}Harvest`} type="date" defaultValue={harvest} /></Field>
       </div>
     </section>
   );
@@ -60,10 +60,10 @@ function CropWaterFields({ data, save, status, markEdited }: { data?: CropWater;
     const secondPlanting = value("secondPlanting");
     const secondHarvest = value("secondHarvest");
     if ((firstPlanting && firstHarvest && firstHarvest < firstPlanting) || (secondPlanting && secondHarvest && secondHarvest < secondPlanting)) {
-      return setError("Revisa las fechas. El corte o cosecha debe ser en la fecha de siembra o después.");
+      return setError("Revisa las fechas. La cosecha debe ser en la fecha de siembra o después.");
     }
     if (firstHarvest && secondPlanting && secondPlanting < firstHarvest) {
-      return setError("La segunda campaña debe iniciar en la fecha de corte de la primera o después.");
+      return setError("La segunda campaña debe iniciar en la fecha de cosecha de la primera o después.");
     }
     const intervalDays = value("intervalDays") ? decimal(value("intervalDays")) : null;
     const volumeM3 = value("volumeM3") ? decimal(value("volumeM3")) : null;
@@ -88,6 +88,7 @@ function CropWaterFields({ data, save, status, markEdited }: { data?: CropWater;
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <fieldset disabled={status === "saving"} className="panel grid gap-5">
           <legend className="px-2 text-lg font-bold">Mis cultivos</legend>
+          <p className="text-sm text-muted">Si siembras para forraje, anota como cosecha el día en que planeas cortar el cultivo.</p>
           <CampaignFields label="Primera campaña" prefix="first" crop={data?.firstCrop} planting={data?.firstPlanting} harvest={data?.firstHarvest} />
           <CampaignFields label="Segunda campaña" prefix="second" crop={data?.secondCrop} planting={data?.secondPlanting} harvest={data?.secondHarvest} />
           <Field label="Prioridad de producción"><Choice name="priority" options={productionPriorities} value={data?.priority} /></Field>

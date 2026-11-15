@@ -2,7 +2,7 @@
 
 const cachePrefix = "field-shift-";
 const cacheName = `${cachePrefix}${buildId}`;
-const publicPages = ["/", "/la-maica", "/la-maica/mi-parcela", "/la-maica/mi-cultivo-y-mi-agua", "/la-maica/comparar", "/la-maica/mi-proximo-turno"];
+const publicPages = ["/", "/consulta", "/la-maica", "/la-maica/mi-parcela", "/la-maica/mi-cultivo-y-mi-agua", "/la-maica/comparar", "/la-maica/mi-proximo-turno"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -22,15 +22,16 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
-  if (request.method !== "GET" || url.origin !== self.location.origin || url.search) return;
+  if (request.method !== "GET" || url.origin !== self.location.origin) return;
 
-  if (request.mode === "navigate" && publicPages.includes(url.pathname)) {
+  if (request.mode === "navigate" && publicPages.includes(url.pathname) && (!url.search || url.pathname === "/consulta")) {
     event.respondWith(fetch(request).catch(async () => {
       const cache = await caches.open(cacheName);
       return (await cache.match(url.pathname)) ?? Response.error();
     }));
     return;
   }
+  if (url.search) return;
 
   if (assets.includes(url.pathname)) {
     event.respondWith(caches.open(cacheName).then(async (cache) => {

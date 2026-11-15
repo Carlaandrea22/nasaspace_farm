@@ -5,6 +5,7 @@ export const imergSource = "https://gpm.nasa.gov/data/imerg";
 export const gamcSource = "https://recursosgamc.cochabamba.bo/api-doc";
 export const inspectionThreshold = 30;
 export const timeZone = "America/La_Paz";
+export const forecastHorizonDays = 14;
 
 export type WeatherDay = { date: string; rain: number | null; et0: number | null; minimum: number | null; maximum?: number | null; humidity?: number | null };
 export type RecentRain = { date: string; rain: number | null; source: "imerg-early" | "modeled" | "missing" };
@@ -31,7 +32,7 @@ function dayTimestamp(date: string) {
 
 const dayMs = 86_400_000;
 
-function addDays(date: string, days: number) {
+export function addDays(date: string, days: number) {
   return new Date(dayTimestamp(date) + days * dayMs).toISOString().slice(0, 10);
 }
 
@@ -65,7 +66,7 @@ export function toForecast(input: unknown, queriedAt: string, early: Record<stri
   }
 
   const today = localDate(queriedAt);
-  const days = Array.from(rows.values()).filter(({ date }) => date >= today && date <= addDays(today, 13)).sort((a, b) => a.date.localeCompare(b.date));
+  const days = Array.from(rows.values()).filter(({ date }) => date >= today && date <= addDays(today, forecastHorizonDays - 1)).sort((a, b) => a.date.localeCompare(b.date));
   if (!days.length) throw new Error("El proveedor no devolvió fechas futuras utilizables.");
 
   const recent = [-3, -2, -1].map<RecentRain>((offset) => {
@@ -103,6 +104,20 @@ export function horizon(days: WeatherDay[], today: string, length: number) {
     const date = addDays(today, day);
     return byDate.get(date) ?? { date, rain: null, et0: null, minimum: null };
   });
+}
+
+export function plantingTemperatureWindow(days: Pick<WeatherDay, "date" | "minimum" | "maximum">[], from: string, limits: number[]) {
+  let start: string | undefined;
+  let end: string | undefined;
+  for (const day of days) {
+    if (day.date < from) continue;
+    const compatible = day.minimum != null && day.maximum != null && day.minimum >= limits[0] && day.maximum <= limits[3];
+    if (end && (!compatible || day.date !== addDays(end, 1))) break;
+    if (!compatible) continue;
+    start ??= day.date;
+    end = day.date;
+  }
+  return start && end ? { start, end } : null;
 }
 
 export function cropStage(planting: string, harvest: string, today: string) {

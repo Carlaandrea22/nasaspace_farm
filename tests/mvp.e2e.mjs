@@ -8,6 +8,12 @@ const install = process.env.PLAYWRIGHT_CHROMIUM_CHANNEL;
 const cityDay = new Intl.DateTimeFormat("en-CA", { timeZone: "America/La_Paz", year: "numeric", month: "2-digit", day: "2-digit" });
 const dateShift = (date, offset) => new Date(Date.parse(date + "T00:00:00Z") + 86400000 * offset).toISOString().slice(0, 10);
 
+async function openReport(page, name = "Consultar ubicación") {
+  const [report] = await Promise.all([page.waitForEvent("popup"), page.getByRole("link", { name, exact: true }).click()]);
+  report.setDefaultTimeout(9000);
+  return report;
+}
+
 test("el invitado guarda su parcela, compara escenarios y reabre el MVP sin red", async () => {
   const browser = await chromium.launch(install ? { channel: install } : {});
   try {
@@ -48,10 +54,10 @@ test("el invitado guarda su parcela, compara escenarios y reabre el MVP sin red"
     await places.press("Enter");
     assert.equal(await page.getByLabel("Latitud").inputValue(), "-17.39360");
     await page.getByText("-17.39360, -66.15690", { exact: true }).waitFor();
-    await page.getByRole("button", { name: "Consultar esta parcela" }).waitFor();
+    await page.getByRole("link", { name: "Consultar ubicación" }).waitFor();
     await map.locator(".leaflet-parcel-point-pane path").waitFor({ state: "attached" });
     await map.click({ position: { x: 74, y: 96 } });
-    assert.notEqual(await page.getByLabel("Latitud").inputValue(), "-17.39360");
+    await page.waitForFunction(() => document.querySelector('input[name="latitude"]').value !== "-17.39360");
     await page.getByRole("combobox", { name: "Selecciona tu distrito" }).selectOption("9");
     await page.getByRole("button", { name: "Marcar centro" }).click();
     assert.match(await page.getByLabel("Latitud").inputValue(), /^-17\./);
@@ -118,9 +124,11 @@ test("el invitado guarda su parcela, compara escenarios y reabre el MVP sin red"
     assert.equal(await page.getByLabel("Caudal (L/s)").inputValue(), "5");
     await nav.getByRole("link", { name: "Mis parcelas" }).click();
     await page.getByRole("button", { name: "Tirani · D13 / Tunari" }).click();
-    await page.getByRole("button", { name: "Consultar esta parcela" }).click();
-    await page.getByText("Referencia del piloto:", { exact: false }).waitFor();
-    await page.getByText("No se pudieron consultar las capas municipales.", { exact: false }).waitFor();
+    const offlineReport = await openReport(page);
+    await offlineReport.locator("summary").filter({ hasText: "Contexto territorial" }).click();
+    await offlineReport.getByText("Referencia del piloto:", { exact: false }).waitFor();
+    await offlineReport.getByText("Las capas municipales no están disponibles en este momento.").waitFor();
+    await offlineReport.close();
     await save();
     await nav.getByRole("link", { name: "Rotaciones" }).click();
     await page.getByRole("heading", { name: /Tirani.*datos insuficientes/ }).waitFor();
@@ -213,11 +221,17 @@ test("el historial cambia con el punto y recupera la última consulta sin red", 
     const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
     const page = await context.newPage();
     page.setDefaultTimeout(9000);
-    const queriedAt = new Date().toISOString();
+    const queriedAt = "2026-11-28T16:00:00.000Z";
+    await page.clock.setFixedTime(new Date(queriedAt));
     const today = cityDay.format(new Date(queriedAt));
     const month = today.slice(0, 7);
     const startMonth = Number(month.slice(5)) - 1;
     const consultations = [];
+    await context.route("**/api/weather?*", (route) => route.fulfill({ json: {
+      today, queriedAt, recent: [], days: Array.from({ length: 14 }, (_, index) => ({
+        date: dateShift(today, index), rain: 1, et0: 3, minimum: index === 3 ? 1 : 8, maximum: 25,
+      })),
+    } }));
     await context.route("**/api/enso", (route) => route.fulfill({ json: { issued: month, seasons: [
       { code: "DJF", center: month, nina: 5, neutral: 10, nino: 85 },
     ] } }));
@@ -249,40 +263,73 @@ test("el historial cambia con el punto y recupera la última consulta sin red", 
     await page.goto(origin);
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
     await page.getByRole("button", { name: "La Maica · D9 / Itocta" }).click();
-    const panel = page.getByRole("region", { name: "Clima y cultivos para este punto" });
-    assert.equal(await panel.count(), 0);
     assert.deepEqual(consultations, []);
-    await page.getByRole("button", { name: "Consultar esta parcela" }).click();
-    await page.getByRole("region", { name: "Resultados de la parcela" }).waitFor();
+    const panel = await openReport(page);
+    await panel.getByRole("heading", { name: "¿Qué puedes cultivar aquí?" }).waitFor();
     await panel.getByText("480 mm", { exact: true }).waitFor();
-    await page.getByRole("region", { name: "Contexto territorial" }).getByText("D9 · Itocta", { exact: true }).waitFor();
-    await panel.getByText("Panorama estacional · Pacífico ecuatorial", { exact: true }).click();
+    await panel.locator("summary").filter({ hasText: "Contexto territorial" }).click();
+    await panel.getByRole("region", { name: "Contexto territorial" }).getByText("D9 · Itocta", { exact: true }).waitFor();
+    await panel.locator("summary").filter({ hasText: "Panorama estacional" }).click();
     await panel.getByText(/El Niño · 85%/).waitFor();
     assert.equal(await panel.getByText(/El Niño · 85%/).count(), 1);
-    await panel.getByText("ciclo de referencia de 165 días", { exact: false }).waitFor();
-    await panel.getByText(/3 de 4 ciclos históricos favorables/).waitFor();
-    const monthControl = panel.getByLabel("Mes previsto de siembra");
-    const nextMonth = await monthControl.locator("option").nth(1).getAttribute("value");
-    await monthControl.selectOption(nextMonth);
-    await panel.getByText(/1 de 4 ciclos históricos favorables/).waitFor();
+    await panel.getByText("90–240 días estimados entre siembra y cosecha", { exact: false }).waitFor();
+    const barley = panel.getByRole("listitem").filter({ has: panel.getByRole("heading", { name: "Cebada", exact: true }) });
+    await barley.locator("summary").click();
+    await barley.getByText(/3 de 4 ciclos históricos favorables/).waitFor();
+    const dateControl = panel.getByLabel("¿Cuándo quieres sembrar?");
+    assert.equal(await dateControl.getAttribute("min"), today);
+    assert.equal(await dateControl.getAttribute("max"), dateShift(today, 13));
+    await panel.getByText(/Temperatura compatible del 28 nov.* al 30 nov/).first().waitFor();
+    await dateControl.fill(dateShift(today, -1));
+    await panel.getByText(/Elige una fecha entre/).waitFor();
+    assert.equal(await panel.getByRole("heading", { name: "Cebada" }).count(), 0);
+    await dateControl.fill(dateShift(today, 14));
+    await panel.getByText(/Elige una fecha entre/).waitFor();
+    await dateControl.fill("2026-12-01");
     await panel.getByLabel("Destino de la cosecha").selectOption("forraje");
     await panel.getByText(/Ninguna opción para el destino elegido/).waitFor();
-    await panel.getByRole("listitem").first().getByRole("heading", { name: "Cebada" }).waitFor();
     await panel.getByLabel("pH medido (opcional)").fill("6,9");
-    await panel.getByRole("listitem").first().getByText(/pH medido en el rango óptimo/).waitFor();
+    if (!await barley.locator("details").evaluate((element) => element.open)) await barley.locator("summary").click();
+    await barley.getByText(/1 de 4 ciclos históricos favorables/).waitFor();
+    await barley.getByText(/pH medido en el rango óptimo/).waitFor();
+    await panel.evaluate(() => { window.print = () => { document.body.dataset.printed = "true"; }; });
+    await panel.getByRole("button", { name: "Imprimir o guardar PDF" }).click();
+    assert.equal(await panel.locator("body").getAttribute("data-printed"), "true");
+    await panel.close();
     await page.getByRole("button", { name: "Tirani · D13 / Tunari" }).click();
-    assert.equal(await panel.count(), 0);
-    await page.getByRole("button", { name: "Consultar esta parcela" }).click();
-    await panel.getByText("515 mm", { exact: true }).waitFor();
-    await page.getByRole("region", { name: "Contexto territorial" }).getByText("D13 · Tunari", { exact: true }).waitFor();
-    assert.equal(await panel.getByText("480 mm", { exact: true }).count(), 0);
+    const tirani = await openReport(page);
+    await tirani.getByText("515 mm", { exact: true }).waitFor();
+    await tirani.locator("summary").filter({ hasText: "Contexto territorial" }).click();
+    await tirani.getByRole("region", { name: "Contexto territorial" }).getByText("D13 · Tunari", { exact: true }).waitFor();
+    assert.equal(await tirani.getByText("480 mm", { exact: true }).count(), 0);
+    await tirani.close();
     await page.getByRole("button", { name: "Guardar borrador" }).click();
     await page.getByText("Guardado en este dispositivo").waitFor();
     await context.unrouteAll();
     await context.setOffline(true);
     await page.reload();
-    await panel.getByText("515 mm", { exact: true }).waitFor();
-    await panel.getByText(/NASA POWER.*Copia guardada/i).waitFor();
+    const map = page.getByRole("region", { name: "Mapa de Cochabamba" });
+    await map.locator(".leaflet-districts-pane path").first().waitFor({ state: "attached" });
+    const districtLabels = map.locator(".district-label:visible");
+    assert.equal(await districtLabels.count(), 3);
+    assert.deepEqual((await districtLabels.allTextContents()).sort(), ["D13", "D15", "D9"]);
+    assert.equal(await map.locator(".leaflet-districts-pane path").count(), 15);
+    assert.equal(await page.getByRole("combobox", { name: "Selecciona tu distrito" }).locator("option").count(), 16);
+    assert.ok(await districtLabels.evaluateAll((labels) => labels.every((label) => {
+      const frame = label.closest(".parcel-viewport").getBoundingClientRect();
+      const box = label.getBoundingClientRect();
+      return box.width > 0 && box.left >= frame.left && box.right <= frame.right && box.top >= frame.top && box.bottom <= frame.bottom;
+    })));
+    const scale = map.locator(".leaflet-control-scale-line");
+    const initialScale = await scale.innerText();
+    await map.getByRole("button", { name: "Alejar mapa" }).click();
+    assert.notEqual(await scale.innerText(), initialScale);
+    await page.getByRole("button", { name: "Ver todos los distritos" }).click();
+    assert.equal(await scale.innerText(), initialScale);
+    assert.equal(await page.getByRole("link", { name: "Consultar ubicación", exact: true }).count(), 0);
+    const cached = await openReport(page, "Abrir parcela guardada");
+    await cached.getByText("515 mm", { exact: true }).waitFor();
+    await cached.getByText(/NASA POWER.*Copia guardada/i).waitFor();
   } finally {
     await browser.close();
   }

@@ -236,6 +236,12 @@ h2 {
   display: none;
 }
 
+@media (max-width: 639px) {
+  .parcel-viewport .district-label:not(.priority-district) {
+    display: none;
+  }
+}
+
 .field-hero {
   @apply grid overflow-hidden rounded-[30px] text-[#f8fced];
   grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.12fr);
@@ -675,7 +681,7 @@ h2 {
 .consulta-informe .panel { padding:clamp(13px,2cqi,24px); background-color:#fafbf5ee; }
 .consulta-portada {
   border:2px solid #ffffffdd;
-  background:linear-gradient(180deg,#f6f8f1ee 0%,#f6f8f1b0 15%,transparent 31%,#142710d6 100%),
+  background:linear-gradient(180deg,#f6f8f1ee 0%,#f6f8f1b0 13%,#142710ad 31%,#142710d6 100%),
     url("/images/informe/avena.webp") center 52%/cover #263e24;
 }
 .consulta-portada > a { color:#192b1c; }
@@ -706,7 +712,7 @@ h2 {
 .consulta-indicadores dt { font-size:.75rem; font-weight:650; }
 .consulta-indicadores dt svg { position:absolute; left:9px; top:50%; width:clamp(17px,2.9cqi,32px); height:auto; transform:translateY(-50%); }
 .consulta-indicadores dd { color:#111914; line-height:1.12; }
-.consulta-filtros > summary { display:inline-flex; align-items:center; gap:7px; cursor:pointer; color:#315426; font-size:.85rem; font-weight:750; }
+.consulta-filtros { border:1px solid #d9e6cf; border-radius:14px; background:#edf4e54d; }
 .consulta-grupos { display:grid; gap:12px; margin-top:14px; }
 .consulta-grupos > .consulta-aviso { grid-column:1/-1; margin:0; }
 .consulta-grupo { margin:0; min-width:0; border-radius:20px; }

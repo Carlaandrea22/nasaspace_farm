@@ -70,7 +70,7 @@ export function assessDraft(draft: PilotDraft | undefined) {
   const gaps = [];
   if (!parcel.areaHa) gaps.push("Confirma la superficie de la parcela.");
   if (!crop?.firstCrop || !crop.secondCrop || !cropProfiles[crop.firstCrop] || !cropProfiles[crop.secondCrop]) gaps.push("Registra la secuencia habitual y confirma perfiles agronómicos para sus cultivos.");
-  if (!crop?.firstPlanting || !crop.firstHarvest || !crop.secondPlanting || !crop.secondHarvest) gaps.push("Completa las fechas de siembra y corte de las dos campañas.");
+  if (!crop?.firstPlanting || !crop.firstHarvest || !crop.secondPlanting || !crop.secondHarvest) gaps.push("Completa las fechas de siembra y cosecha de las dos campañas.");
   if (!crop?.priority) gaps.push("Indica la prioridad del productor.");
   if (!crop?.turnDate || !volumeFor(crop)) gaps.push("Confirma fecha y volumen del turno, caudal y duración o un supuesto explícito.");
   if (crop?.turnStatus === "Cancelado") gaps.push("Confirma un turno evaluable, porque el registrado está cancelado.");
