@@ -9,7 +9,8 @@ const channel = process.env.PLAYWRIGHT_CHROMIUM_CHANNEL;
 test("la navegación se adapta a la sesión y al ancho de pantalla", { skip: !origin }, async () => {
   const browser = await chromium.launch(channel ? { channel } : {});
   try {
-    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const page = await context.newPage();
     page.setDefaultTimeout(8000);
     await page.goto(origin + "/la-maica/mi-proximo-turno");
     const header = page.locator(".site-header");
@@ -85,13 +86,27 @@ test("la navegación se adapta a la sesión y al ancho de pantalla", { skip: !or
     assert.equal(await nav.getByRole("link", { name: "Agua" }).getAttribute("aria-current"), "page");
     await explore.click();
     await page.waitForURL(origin + "/");
+    await nav.getByRole("link", { name: "Mis parcelas" }).click();
+    await page.waitForURL("**/la-maica/mi-parcela");
+    const report = await context.newPage();
+    const savedReport = origin + "/consulta?lat=-17.34111&lon=-66.15589&guardada=default";
+    await report.goto(savedReport);
+    await report.getByRole("button", { name: "Luis", exact: true }).waitFor();
     await account.click();
-    await header.getByRole("button", { name: "Cerrar sesión" }).click();
+    await Promise.all([
+      page.waitForURL(origin + "/"),
+      report.waitForURL(origin + "/"),
+      header.getByRole("button", { name: "Cerrar sesión" }).click(),
+    ]);
     await signIn.waitFor();
     assert.equal(await links.count(), 1);
     assert.ok(await register.isVisible());
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     assert.ok(await header.evaluate((element) => element.contains(document.querySelector('nav[aria-label="Navegación principal"]'))));
+    await report.goto(savedReport);
+    await report.waitForURL(origin + "/");
+    await report.goto(origin + "/consulta?lat=-17.34111&lon=-66.15589");
+    await report.getByRole("heading", { name: "¿Qué puedes cultivar aquí?" }).waitFor();
   } finally {
     await browser.close();
   }

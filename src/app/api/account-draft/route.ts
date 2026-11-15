@@ -1,7 +1,8 @@
-import { applyDraftPatch, cropForParcel, cropWaterFromReport, locationKey, type PilotDraft } from "../../../features/pilot/draft";
+import { applyDraftPatch, cropForParcel, cropWaterFromReport, locationKey, type Parcel, type PilotDraft } from "../../../features/pilot/draft";
 import { localDate } from "../../../features/operations/model";
 import { getAuth, pool, trustedOrigins } from "../../../server/auth";
-import { draftPatchSchema, fullDraftSchema, reportWaterPatchSchema } from "../../../server/draft-validation";
+import { draftPatchSchema, fullDraftSchema, reportPatchSchema } from "../../../server/draft-validation";
+import { parcelLabel } from "../../../server/parcel-label";
 
 const headers = { "Cache-Control": "no-store" };
 const json = (data: unknown, status = 200) => Response.json(data, { status, headers });
@@ -22,12 +23,14 @@ export async function GET(request: Request) {
     const userId = await getUserId(request);
     if (!userId) return json({ error: "Inicia sesión para abrir tu borrador." }, 401);
     if (new URL(request.url).searchParams.has("list")) {
-      const { rows } = await pool.query(
-        `SELECT parcel_id AS id, COALESCE(draft #>> '{parcel,name}', '') AS name
+      const { rows } = await pool.query<{ id: string; parcel: Parcel | null }>(
+        `SELECT parcel_id AS id, draft -> 'parcel' AS parcel
          FROM field_shift_drafts WHERE user_id = $1 ORDER BY updated_at DESC, parcel_id`,
         [userId],
       );
-      return json(rows);
+      return json(await Promise.all(rows.map(async ({ id, parcel }) => ({
+        id, name: parcel?.name ?? "", label: await parcelLabel(parcel ?? undefined),
+      }))));
     }
     const parcelId = selectedParcel(request);
     if (!parcelId) return json({ error: "Parcela inválida." }, 400);
@@ -63,22 +66,28 @@ async function write(request: Request) {
         "INSERT INTO field_shift_drafts (user_id, parcel_id, draft) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
         [userId, parcelId, JSON.stringify(parsed.data)],
       );
-      return copied.rowCount ? json(parsed.data) : json({ error: "La cuenta ya tiene un borrador." }, 409);
+      return copied.rowCount
+        ? json({ ...parsed.data, parcelLabel: await parcelLabel(parsed.data.parcel) })
+        : json({ error: "La cuenta ya tiene un borrador." }, 409);
     }
 
-    const report = reportWaterPatchSchema.safeParse(data);
+    const report = reportPatchSchema.safeParse(data);
+    const reportWater = report.success && "reportWater" in report.data ? report.data.reportWater : undefined;
+    const waterOptions = report.success && "waterOptions" in report.data ? report.data.waterOptions : undefined;
+    const reportRotation = report.success && "reportRotation" in report.data ? report.data.reportRotation : undefined;
+    const reportLocation = reportWater?.location ?? reportRotation?.location;
     const parsed = draftPatchSchema.safeParse(data);
     if (!report.success && (!parsed.success || !(parsed.data.parcel || parsed.data.cropWater))) {
       return json({ error: "Borrador inválido." }, 400);
     }
-    if (report.success) {
+    if (reportWater) {
       const today = localDate(new Date().toISOString());
-      const { planting, harvest, turn } = report.data.reportWater;
+      const { planting, harvest, turn } = reportWater;
       if (planting > today || harvest < today || (turn && turn < today)) {
         return json({ error: "Revisa las fechas del cultivo y el turno." }, 400);
       }
-      if (report.data.newParcel && parcelId === "default") return json({ error: "Identifica la nueva parcela." }, 400);
     }
+    if (report.data?.newParcel && parcelId === "default") return json({ error: "Identifica la nueva parcela." }, 400);
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -86,7 +95,7 @@ async function write(request: Request) {
       if (!report.success || newParcel) {
         const initial: PilotDraft = {
           id: crypto.randomUUID(), version: 1,
-          ...(newParcel && { parcel: { ...report.data!.reportWater.location, ...newParcel } }),
+          ...(newParcel && reportLocation && { parcel: { ...reportLocation, ...newParcel } }),
         };
         await client.query(
           "INSERT INTO field_shift_drafts (user_id, parcel_id, draft) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
@@ -101,21 +110,29 @@ async function write(request: Request) {
         await client.query("ROLLBACK");
         return json({ error: "Guarda primero la parcela en tu cuenta." }, 404);
       }
-      const reportWater = report.data?.reportWater;
-      if (reportWater && locationKey(previous.parcel) !== locationKey(reportWater.location)) {
+      const parcelKey = locationKey(previous.parcel);
+      if (reportLocation && parcelKey !== locationKey(reportLocation)) {
         await client.query("ROLLBACK");
         return json({ error: "La ubicación del informe cambió. Abre de nuevo la parcela guardada." }, 409);
       }
-      const patch = reportWater && previous.parcel
-        ? { cropWater: cropWaterFromReport(cropForParcel(previous), previous.parcel, reportWater) }
-        : parsed.data!;
-      const draft = applyDraftPatch(previous, patch);
+      const draft = applyDraftPatch(previous, report.success ? {
+        ...(reportWater && previous.parcel && { cropWater: cropWaterFromReport(cropForParcel(previous), previous.parcel, reportWater) }),
+      } : parsed.data!);
+      if (reportWater || reportRotation) {
+        draft.consultation = {
+          ...(previous.consultation?.parcelKey === parcelKey && previous.consultation),
+          parcelKey,
+          mode: reportWater ? "water" : "rotations",
+          ...(reportWater && { water: { inputs: reportWater, options: waterOptions } }),
+          ...(reportRotation && { rotations: { inputs: reportRotation.inputs, seedCosts: reportRotation.seedCosts } }),
+        };
+      }
       await client.query(
         "UPDATE field_shift_drafts SET draft = $3, updated_at = now() WHERE user_id = $1 AND parcel_id = $2",
         [userId, parcelId, JSON.stringify(draft)],
       );
       await client.query("COMMIT");
-      return json(draft);
+      return json({ ...draft, parcelLabel: await parcelLabel(draft.parcel) });
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;

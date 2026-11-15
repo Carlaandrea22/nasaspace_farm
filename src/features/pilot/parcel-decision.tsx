@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Button } from '../../components/ui/button';
 import { accountDraft } from '../../lib/browser/account-drafts';
 import { readPilotDraft } from '../../lib/browser/pilot-drafts';
-import { cropForParcel, locationKey, type CropWater, type Parcel, type PilotDraft, type ReportWater } from './draft';
+import { cropForParcel, locationKey, type CropWater, type Parcel, type PilotDraft, type ReportSave, type SavedConsultation } from './draft';
 import type { ParcelMoisture, ParcelSoil } from '../../server/parcel-sources';
 import type { smapSummary } from '../../server/smap';
 import { WaterDecision } from './water-decision';
@@ -16,13 +16,16 @@ import type { ReferenceCase } from '../territory/reference';
 import type { ConsultationMode, ConsultationPhase } from './consultation-progress';
 
 export type ParcelEvidence = {soil:ParcelSoil;soilStatus?:SoilStatus;moisture?:ParcelMoisture;smap:ReturnType<typeof smapSummary>;queriedAt:string};
-export default function ParcelDecision({ mode, parcel, demo, account, savedParcelId, onProgress }: {
-  mode: 'water' | 'rotations'; parcel: Parcel; demo?: ReferenceCase; account: boolean; savedParcelId?: string;
+export default function ParcelDecision({ mode, parcel, demo, account, savedParcelId, saveFooter, onProgress, onResume }: {
+  mode: ConsultationMode | null; parcel: Parcel; demo?: ReferenceCase; account: boolean; savedParcelId?: string;
+  saveFooter: HTMLDivElement | null;
   onProgress: (mode: ConsultationMode, phase: ConsultationPhase) => void;
+  onResume: (mode: ConsultationMode | null, failed?: boolean) => void;
 }) {
   const waterProgress = useCallback((phase: ConsultationPhase) => onProgress('water', phase), [onProgress]);
   const rotationProgress = useCallback((phase: ConsultationPhase) => onProgress('rotations', phase), [onProgress]);
   const [known,setKnown]=useState<CropWater>();
+  const [restored, setRestored] = useState<SavedConsultation>();
   const [accountParcel, setAccountParcel] = useState<string>();
   const newParcelId = useRef<string>(undefined);
   const [evidence,setEvidence]=useState<ParcelEvidence>();
@@ -30,7 +33,7 @@ export default function ParcelDecision({ mode, parcel, demo, account, savedParce
   const [error,setError]=useState('');
   const [attempt,setAttempt]=useState(0);
   const [visited,setVisited]=useState({water:mode==='water',rotations:mode==='rotations'});
-  if(!visited[mode])setVisited({...visited,[mode]:true});
+  if(mode && !visited[mode])setVisited({...visited,[mode]:true});
   useEffect(() => {
     if (demo || (account && !savedParcelId)) return;
     let active = true;
@@ -38,13 +41,23 @@ export default function ParcelDecision({ mode, parcel, demo, account, savedParce
       ? accountDraft<PilotDraft | undefined>(new URLSearchParams({ parcel: savedParcelId! }).toString())
       : readPilotDraft();
     draft.then((saved) => {
-      if (!active || !saved) return;
-      if (account && locationKey(saved.parcel) === locationKey(parcel)) setAccountParcel(savedParcelId);
-      setKnown(cropForParcel({ ...saved, parcel }));
-    }).catch(() => {}).finally(() => { if (active) setDraftReady(true); });
+      if (!active) return;
+      const key = locationKey(parcel);
+      const matches = saved && locationKey(saved.parcel) === key;
+      const crop = saved && (!account || matches) ? cropForParcel({ ...saved, parcel }) : undefined;
+      setKnown(crop);
+      if (account && matches) {
+        setAccountParcel(savedParcelId);
+        const consultation = saved.consultation?.parcelKey === key ? saved.consultation : undefined;
+        setRestored(consultation);
+        onResume(consultation?.mode ?? (crop?.currentCrop ? 'water' : null));
+      } else if (account) onResume(null, true);
+    }).catch(() => { if (active && account) onResume(null, true); }).finally(() => { if (active) setDraftReady(true); });
     return () => { active = false; };
-  }, [account, demo, parcel, savedParcelId]);
+  }, [account, demo, onResume, parcel, savedParcelId]);
+  const hasMode = mode !== null;
   useEffect(()=>{
+    if (!hasMode) return;
     const controller=new AbortController();
     const params=new URLSearchParams({lat:String(parcel.latitude),lon:String(parcel.longitude)});
     async function loadEvidence() {
@@ -71,21 +84,21 @@ export default function ParcelDecision({ mode, parcel, demo, account, savedParce
     }
     void loadEvidence();
     return()=>controller.abort();
-  },[parcel.latitude,parcel.longitude,attempt]);
+  },[parcel.latitude,parcel.longitude,attempt,hasMode]);
 
-  async function saveReportWater(reportWater: ReportWater) {
+  async function saveReport(report: ReportSave) {
     if (!account || (savedParcelId && savedParcelId !== accountParcel)) throw new Error('account-draft');
     const creating = !savedParcelId && !accountParcel;
     const id = accountParcel ?? (newParcelId.current ??= crypto.randomUUID());
     const query = new URLSearchParams({ parcel: id }).toString();
     const saved = await accountDraft<PilotDraft>(query, 'PATCH', {
-      reportWater,
+      ...report,
       ...(creating && { newParcel: {
-        name: `Parcela ${parcel.latitude.toFixed(5)}, ${parcel.longitude.toFixed(5)}`,
+        name: '',
         areaHa: parcel.areaHa,
       } }),
     });
-    setKnown(cropForParcel(saved));
+    if ('reportWater' in report) setKnown(cropForParcel(saved));
     if (creating) {
       setAccountParcel(id);
       const url = new URL(window.location.href);
@@ -115,10 +128,14 @@ export default function ParcelDecision({ mode, parcel, demo, account, savedParce
         <Link href="/la-maica/mi-parcela" className="font-semibold underline">Mis parcelas</Link>.
       </p>}
       {draftReady && visited.water && <WaterDecision parcel={parcel} evidence={evidence} known={known}
-        onCropKnown={setKnown} onProgress={waterProgress} onSave={canSave ? saveReportWater : undefined}
-        creatingParcel={canSave && !savedParcelId} parcelId={canSave ? accountParcel : undefined} />}
+        restored={restored?.water} onCropKnown={setKnown} onProgress={waterProgress}
+        onSave={canSave ? (reportWater, waterOptions) => saveReport({ reportWater, waterOptions }) : undefined}
+        creatingParcel={canSave && !savedParcelId} parcelId={canSave ? accountParcel : undefined} saveFooter={mode === 'water' ? saveFooter : null} />}
     </div>
-    <div hidden={mode!=='rotations'} id="parcel-rotations">{draftReady && visited.rotations && <RotationDecision key={locationKey(parcel)} parcel={parcel} evidence={evidence} known={known} onProgress={rotationProgress} />}</div>
+    <div hidden={mode!=='rotations'} id="parcel-rotations">{draftReady && visited.rotations && <RotationDecision parcel={parcel} evidence={evidence} known={known}
+      restored={restored?.rotations} onProgress={rotationProgress} autoSave={Boolean(accountParcel)}
+      onSave={canSave ? (rotation) => saveReport({ reportRotation: { ...rotation, location: parcel } }) : undefined}
+      saveFooter={mode === 'rotations' ? saveFooter : null} />}</div>
     {evidence&&<details className="rounded-2xl bg-leaf/40 p-4 text-sm">
       <summary className="cursor-pointer font-semibold">¿De dónde salen los datos de mi terreno?</summary>
       {evidence.soil?<>

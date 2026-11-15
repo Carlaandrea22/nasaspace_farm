@@ -1,7 +1,10 @@
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
+import { isDeepStrictEqual } from 'node:util';
 import { parseSoil } from '../src/domain/water-balance/source-parsers.ts';
 
 const points=[{name:'Tirani',latitude:-17.34161,longitude:-66.15458}];
+const bundle='src/data/soil-pilots.json';
+const previous=JSON.parse(await readFile(bundle,'utf8')).samples;
 const samples=[];
 for(const point of points){
   const url=new URL('https://rest.isric.org/soilgrids/v2.0/properties/query');
@@ -13,7 +16,9 @@ for(const point of points){
   if(!response.ok)throw new Error(`SoilGrids ${response.status}; existing file unchanged`);
   const payload=await response.json(),profile=parseSoil(payload);
   if(!profile)throw new Error('Incomplete soil profile; existing file unchanged');
-  samples.push({point,profile,url:url.toString(),queriedAt:new Date().toISOString(),source:'SoilGrids · ISRIC · extracción verificada de 250 m'});
+  const verified=previous.find(sample=>sample.verifiedCell&&sample.point.latitude===point.latitude&&
+    sample.point.longitude===point.longitude&&isDeepStrictEqual(sample.profile,profile));
+  samples.push(verified??{point,profile,url:url.toString(),queriedAt:new Date().toISOString(),source:'SoilGrids · ISRIC · extracción verificada de 250 m'});
 }
-await writeFile('src/data/soil-pilots.json',JSON.stringify({samples},null,2)+'\n');
+await writeFile(bundle,JSON.stringify({samples},null,2)+'\n');
 console.log(`Saved ${samples.length} verified soil profiles with provenance.`);

@@ -48,9 +48,15 @@
           "clay": 34
         }
       ],
-      "url": "https://rest.isric.org/soilgrids/v2.0/properties/query?lat=-17.34161&lon=-66.15458&property=wv0033&property=wv1500&property=sand&property=clay&depth=0-5cm&depth=5-15cm&depth=15-30cm&depth=30-60cm&depth=60-100cm&value=mean",
-      "queriedAt": "2026-11-15T11:45:09.137Z",
-      "source": "SoilGrids · ISRIC · extracción verificada de 250 m"
+      "verifiedCell": {
+        "west": -66.15611111111112,
+        "south": -17.342875,
+        "east": -66.1538888888889,
+        "north": -17.3405
+      },
+      "url": "https://docs.isric.org/globaldata/soilgrids/wcs.html",
+      "queriedAt": "2026-11-15T16:51:00Z",
+      "source": "SoilGrids · ISRIC · celda de 250 m verificada con WCS"
     }
   ]
 }

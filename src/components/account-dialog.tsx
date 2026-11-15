@@ -8,17 +8,27 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 
 export function AccountDialog() {
-  const { data: session } = authClient.useSession();
+  const { data: session, isPending } = authClient.useSession();
   const path = usePathname();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const accountRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const hadSession = useRef(false);
   const menuId = useId();
   const [menuOpen, setMenuOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [register, setRegister] = useState(false);
   const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    if (session) {
+      hadSession.current = true;
+    } else if (!isPending && hadSession.current) {
+      hadSession.current = false;
+      window.location.replace("/");
+    }
+  }, [session, isPending]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -83,8 +93,9 @@ export function AccountDialog() {
     try {
       const result = await authClient.signOut();
       if (result.error) throw new Error("sign-out");
+      hadSession.current = false;
       setMenuOpen(false);
-      triggerRef.current?.focus();
+      window.location.replace("/");
     } catch {
       setMessage("No pudimos cerrar la sesión. Inténtalo de nuevo con conexión.");
     } finally {

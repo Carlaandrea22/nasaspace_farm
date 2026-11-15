@@ -168,7 +168,7 @@ function ForecastDetails({ forecast, period: selectedPeriod, onPeriodChange, sho
   const days = horizon(forecast.days, forecast.today, period);
   return (
     <section aria-labelledby="forecast-title" className="panel">
-      <h2 id="forecast-title" className="flex items-center gap-2 text-2xl font-bold"><CloudRain size={23} aria-hidden="true" /> Pronóstico</h2>
+      <h2 id="forecast-title" className="flex scroll-mt-24 items-center gap-2 text-2xl font-bold"><CloudRain size={23} aria-hidden="true" /> Pronóstico</h2>
       {showPeriod && <div role="group" aria-label="Horizonte del pronóstico" className="my-3 flex gap-2">
         {([7, 14] as const).map((value) => (
           <Button key={value} variant="secondary" aria-pressed={period === value} className="aria-pressed:border-action aria-pressed:bg-leaf" onClick={() => setPeriod(value)}>{value} días</Button>
@@ -307,7 +307,7 @@ export function ForecastPanel({ parcel, parcelId, cropWater, consultation, harve
       </div>
       {done && !forecast && <Alert role="note" className="mb-7"><AlertTitle>Pronóstico no disponible</AlertTitle><AlertDescription>No hay datos guardados para este punto. Vuelve a consultar con conexión.</AlertDescription></Alert>}
       {cached && <Alert role="note" className="mb-7"><AlertTitle>Pronóstico de una consulta anterior</AlertTitle><AlertDescription>Consulta la fecha indicada y actualiza antes de ajustar el riego.</AlertDescription></Alert>}
-      <ClimateNotices forecast={forecast} cached={cached} parcelKey={parcelKey} />
+      <ClimateNotices forecast={forecast} cached={cached} parcelKey={parcelKey}>
       {sheet && <Inspection key={`${parcelId}:${sheet.date}`} sheet={sheet} parcelId={parcelId} />}
       {heavy && !sheet && <Alert role="note" className="mb-7"><AlertTitle>Señal de lluvia intensa</AlertTitle><AlertDescription>
         {amount(heavy.rain)} el {formatDate(heavy.date)}. {territory?.drainage.status === "no-match"
@@ -333,6 +333,7 @@ export function ForecastPanel({ parcel, parcelId, cropWater, consultation, harve
           <ForecastDetails forecast={forecast} period={period} onPeriodChange={onPeriodChange} showPeriod={showPeriod} />
         </div>
       )}
+      </ClimateNotices>
       <details className="mt-7 border-t border-line pt-3 text-sm">
         <summary className="cursor-pointer font-semibold">Fuentes y criterio de inspección</summary>
         <p className="mt-2 leading-relaxed text-muted">La ficha requiere una coincidencia en Drenaje e Influencia del GAMC y una señal de al menos {inspectionThreshold} mm en un día durante los próximos tres días o en el último día cerrado de IMERG Early. Es un umbral operativo del piloto para revisar en campo. Un desborde requiere información hidráulica.</p>

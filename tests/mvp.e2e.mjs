@@ -460,7 +460,7 @@ test("la inspección se puede abrir y descargar con condiciones controladas", as
     await page.addInitScript(() => {
       window.deliveredNotices = [];
       ServiceWorkerRegistration.prototype.showNotification = async (title, options) => {
-        window.deliveredNotices.push({ title, tag: options.tag });
+        window.deliveredNotices.push({ title, tag: options.tag, body: options.body });
       };
     });
     await page.route("**/api/enso", (route) => route.fulfill({ json: { issued: month, seasons: [
@@ -480,13 +480,19 @@ test("la inspección se puede abrir y descargar con condiciones controladas", as
     await page.goto(origin + "/la-maica/mi-proximo-turno");
     await page.getByRole("heading", { name: "Avisos climáticos" }).waitFor();
     await page.getByText(/Máxima de 34 °C · humedad media de 37%/).waitFor();
-    await page.getByText(/La Niña: 82%/).waitFor();
+    const seasonal = page.getByRole("region", { name: "Panorama estacional", exact: true });
+    await seasonal.getByText("82 % de probabilidad de La Niña en el Pacífico ecuatorial.", { exact: true }).waitFor();
+    assert.equal(await page.getByRole("region", { name: "Avisos climáticos" }).getByText(/82 %/).count(), 0);
+    await seasonal.getByRole("link", { name: "Ver el pronóstico para tu parcela" }).click();
+    assert.equal(new URL(page.url()).hash, "#forecast-title");
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
     assert.equal(await page.evaluate(() => window.deliveredNotices.length), 0);
     await page.getByRole("button", { name: "Activar notificaciones" }).click();
     await page.waitForFunction(() => window.deliveredNotices.length === 2);
     const tags = await page.evaluate(() => window.deliveredNotices.map(({ tag }) => tag));
     assert.deepEqual(tags, [`field-shift:heat:-17.42442,-66.18272:${today}`, `field-shift:enso:${month}:La Niña`]);
+    assert.match(await page.evaluate(() => window.deliveredNotices.find(({ tag }) => tag.startsWith("field-shift:enso:")).body), /Pacífico ecuatorial/);
     await page.getByRole("button", { name: "Actualizar pronóstico" }).click();
     await page.getByText(/Máxima de 34 °C · humedad media de 37%/).waitFor();
     assert.equal(await page.evaluate(() => window.deliveredNotices.length), 2);

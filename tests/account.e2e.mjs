@@ -72,9 +72,11 @@ test("cuenta de prueba guarda y recupera un borrador sin mezclar el modo invitad
     await other.goto(origin + "/la-maica/mi-parcela");
     assert.equal((await other.request.get(origin + "/api/account-draft")).status(), 401);
     await signIn(other);
-    assert.equal(await name(other).inputValue(), "Parcela guardada en la cuenta");
     const saved = await (await other.request.get(origin + "/api/account-draft")).json();
     assert.equal(saved.parcel.outline.length, 4);
+    await other.getByRole("heading", { name: "Nueva parcela", exact: true }).waitFor();
+    await other.getByLabel("Parcelas guardadas").selectOption("default");
+    assert.equal(await name(other).inputValue(), "Parcela guardada en la cuenta");
     await other.getByRole("link", { name: "Ir a cultivo y agua" }).click();
     assert.equal(await other.getByLabel("Caudal (L/s)").inputValue(), "7");
 

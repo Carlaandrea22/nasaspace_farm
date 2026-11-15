@@ -5,13 +5,16 @@ import { ensoSource, type EnsoOutlook, type EnsoSeason } from "../../domain/clim
 
 const storageKey = "field-shift-enso-v1";
 const monthLabel = new Intl.DateTimeFormat("es-BO", { month: "long", year: "numeric", timeZone: "UTC" });
-const shortMonth = new Intl.DateTimeFormat("es-BO", { month: "short", year: "2-digit", timeZone: "UTC" });
+const monthOnly = new Intl.DateTimeFormat("es-BO", { month: "long", timeZone: "UTC" });
 
 export const labelMonth = (month: string) => monthLabel.format(new Date(`${month}-01T00:00:00Z`));
 
 export function seasonLabel(season: EnsoSeason) {
   const [year, month] = season.center.split("-").map(Number);
-  return `${shortMonth.format(Date.UTC(year, month - 2, 1))}–${shortMonth.format(Date.UTC(year, month, 1))}`;
+  const start = new Date(Date.UTC(year, month - 2, 1));
+  const end = new Date(Date.UTC(year, month, 1));
+  const startLabel = start.getUTCFullYear() === end.getUTCFullYear() ? monthOnly.format(start) : monthLabel.format(start);
+  return `${startLabel} a ${monthLabel.format(end)}`;
 }
 
 function readSavedEnso(): EnsoOutlook | null {

@@ -34,6 +34,7 @@ type RotationNotice = {
   soilSource: string;
   alternatives: PlantingAlternative[];
   selected?: Result;
+  seedQuotes: string[];
 };
 
 export async function downloadRotationNotice(data: RotationNotice) {
@@ -95,6 +96,10 @@ export async function downloadRotationNotice(data: RotationNotice) {
   });
   y = write(`Clima histórico: NASA POWER, ${data.history}. Suelo: ${data.soilSource}.`, 16, y + 3, 178, 9) + 2;
   y = write("Estimación basada en el clima histórico y un escenario sin riego. Confirma las fechas y el agua disponible antes de sembrar.", 16, y, 178, 9) + 2;
+  if (data.seedQuotes.length) {
+    y = write("Costos de semilla declarados", 16, y + 1, 178, 9, true) + 1;
+    y = write(data.seedQuotes.join("\n"), 16, y, 178, 9) + 2;
+  }
   doc.setFontSize(9);
   doc.setTextColor(ink);
   doc.textWithLink("Créditos de las fotografías", 16, y, { url: new URL("/images/informe/creditos.html", window.location.origin).href });

@@ -1,7 +1,7 @@
 "use client";
 
 import { Bell, CloudSun, ThermometerSun } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "../../components/ui/button";
 import { ensoSource, hasEnsoCoverage, relevantEnso } from "../../domain/climate/enso";
 import { forecastSource, formatDate, heatSignals, heatThreshold, horizon, localDate, type Forecast } from "../operations/model";
@@ -21,7 +21,9 @@ function readPermission() {
   }
 }
 
-export function ClimateNotices({ forecast, cached, parcelKey }: { forecast: Forecast | null; cached: boolean; parcelKey: string }) {
+export function ClimateNotices({ forecast, cached, parcelKey, children }: {
+  forecast: Forecast | null; cached: boolean; parcelKey: string; children: ReactNode;
+}) {
   const season = useEnso();
   const weatherIsCurrent = forecast && !cached && forecast.today === localDate(new Date().toISOString());
   const heat = weatherIsCurrent ? heatSignals(forecast) : [];
@@ -35,11 +37,11 @@ export function ClimateNotices({ forecast, cached, parcelKey }: { forecast: Fore
   }));
   if (seasonal && outlook && !season?.cached) pending.push({
     key: `enso:${outlook.issued}:${seasonal.phase}`,
-    title: `Vigilancia estacional · ${seasonal.phase}`,
-    body: `NOAA CPC estima ${seasonal.probability}% en ${seasonLabel(seasonal)}. Confirma el panorama local para tu campaña.`,
+    title: `Boletín estacional · ${seasonal.phase}`,
+    body: `NOAA CPC publica ${seasonal.probability} % de probabilidad de ${seasonal.phase} en el Pacífico ecuatorial, de ${seasonLabel(seasonal)}.`,
   });
 
-  return (
+  return <>
     <section aria-labelledby="climate-notices-title" className="panel mb-6 grid gap-3">
       <h2 id="climate-notices-title" className="flex items-center gap-2 text-xl font-bold"><Bell size={20} aria-hidden="true" /> Avisos climáticos</h2>
       {heat.length > 0 ? (
@@ -58,24 +60,31 @@ export function ClimateNotices({ forecast, cached, parcelKey }: { forecast: Fore
             : "Actualiza el pronóstico para evaluar avisos de calor."}
         </p>
       )}
-      <div className="border-t border-line pt-3">
-        <h3 className="flex items-center gap-2 text-sm font-bold"><CloudSun size={16} aria-hidden="true" /> Panorama estacional</h3>
+      <NoticeSettings entries={pending} />
+    </section>
+    {children}
+    <section aria-labelledby="seasonal-outlook-title" className="panel mt-6">
+        <h2 id="seasonal-outlook-title" className="flex items-center gap-2 text-lg font-bold"><CloudSun size={18} aria-hidden="true" /> Panorama estacional</h2>
         {!season && <p className="mt-1 text-sm text-muted">Consultando el boletín estacional…</p>}
         {season && !outlook && <p className="mt-1 text-sm text-muted">Boletín estacional no disponible. <a className="underline" href={ensoSource}>Consultar NOAA CPC</a>.</p>}
         {outlook && <>
-          <p className="my-1 text-sm text-muted">
-            {seasonal
-              ? `${seasonal.phase}: ${seasonal.probability}% en ${seasonLabel(seasonal)}. Consulta el panorama local de lluvia y temperatura antes de decidir la campaña.`
-              : hasEnsoCoverage(outlook, today, seasonalDays)
+          {seasonal ? <>
+            <p className="mt-2 font-semibold">{seasonal.probability} % de probabilidad de {seasonal.phase} en el Pacífico ecuatorial.</p>
+            <p className="my-1 text-sm text-muted">Trimestre de {seasonLabel(seasonal)}.</p>
+          </> : <p className="my-1 text-sm text-muted">
+            {hasEnsoCoverage(outlook, today, seasonalDays)
                 ? "Sin señal de El Niño o La Niña por encima del umbral de vigilancia en los trimestres disponibles."
                 : "El boletín no cubre el periodo consultado."}
-          </p>
+          </p>}
           <EnsoAttribution outlook={outlook} cached={Boolean(season?.cached)} />
         </>}
-      </div>
-      <NoticeSettings entries={pending} />
+        <p className="mt-2 text-sm text-muted">
+          Este boletín da contexto para la campaña. {forecast && <>
+            <a href="#forecast-title" className="font-semibold underline underline-offset-2">Ver el pronóstico para tu parcela</a> para revisar el próximo riego.
+          </>}
+        </p>
     </section>
-  );
+  </>;
 }
 
 function NoticeSettings({ entries }: { entries: Notice[] }) {
@@ -136,7 +145,7 @@ function NoticeSettings({ entries }: { entries: Notice[] }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line pt-3">
       {available && <Button variant="secondary" type="button" onClick={() => void toggle()}>{enabled ? "Desactivar notificaciones" : "Activar notificaciones"}</Button>}
-      <p className="text-xs text-muted">Avisos al abrir Agua y mientras la pantalla está activa. Pronóstico diario de <a href={forecastSource} className="underline">Open-Meteo</a>.</p>
+      <p className="text-xs text-muted">En Agua puedes recibir avisos de calor previsto de <a href={forecastSource} className="underline">Open-Meteo</a> y boletines estacionales de NOAA CPC mientras la pantalla está activa.</p>
       {status && <p className="w-full text-xs text-muted" role="status">{status}</p>}
     </div>
   );

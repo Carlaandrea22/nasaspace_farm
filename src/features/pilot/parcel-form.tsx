@@ -5,7 +5,7 @@ import { ArrowRight, CircleDot, MapPinned } from "lucide-react";
 import { useState, type SubmitEvent } from "react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
-import { coordinates, decimal, pilotCoordinates, type Coordinates, type Parcel } from "./draft";
+import { coordinates, decimal, parcelCustomName, pilotCoordinates, type Coordinates, type Parcel } from "./draft";
 import { DraftActions, DraftForm, DraftHeader, Field, type DraftStatus } from "./draft-form";
 
 const ParcelMap = dynamic(() => import("./parcel-map"), {
@@ -27,7 +27,7 @@ export function ParcelForm({ explore = false }: { explore?: boolean }) {
 }
 
 function ParcelFields({ parcel, explore, parcelId, save, status, markEdited }: { parcel?: Parcel; explore: boolean; parcelId?: string; save: (parcel: Parcel) => Promise<void>; status: DraftStatus; markEdited: () => void }) {
-  const initial = parcel ?? (explore ? null : pilotCoordinates);
+  const initial = parcel ?? (explore || parcelId ? null : pilotCoordinates);
   const [latitude, setLatitude] = useState(String(initial?.latitude ?? ""));
   const [longitude, setLongitude] = useState(String(initial?.longitude ?? ""));
   const [outline, setOutline] = useState(parcel?.outline);
@@ -35,7 +35,7 @@ function ParcelFields({ parcel, explore, parcelId, save, status, markEdited }: {
   const [error, setError] = useState("");
   const [mapOpen, setMapOpen] = useState(explore || !parcel);
   const [view, setView] = useState("");
-  const [pointChosen, setPointChosen] = useState(!explore);
+  const [pointChosen, setPointChosen] = useState(Boolean(initial));
   const selected = coordinates(latitude, longitude);
   const mapPoint = pointChosen ? selected : null;
   const params = new URLSearchParams(mapOpen ? view : "");
@@ -127,11 +127,11 @@ function ParcelFields({ parcel, explore, parcelId, save, status, markEdited }: {
           </div>
         </section>
         {!explore && <section aria-labelledby="parcel-fields" className="panel">
-          <h2 id="parcel-fields" className="text-xl font-bold">Datos de la parcela</h2>
+          <h2 id="parcel-fields" className="text-xl font-bold">{parcelId && !parcel ? "Nueva parcela" : "Datos de la parcela"}</h2>
           <p className="mt-1 text-sm text-muted">{parcelId ? "Puedes editar los datos y guardar la parcela en tu cuenta." : "Puedes editar los datos y guardar la parcela en este dispositivo."}</p>
           <form className="mt-4" onSubmit={submit} onChange={() => { setError(""); markEdited(); }}>
             <fieldset disabled={status === "saving"} className="grid gap-4">
-              <Field label="Nombre de la parcela (opcional)"><Input name="name" maxLength={100} defaultValue={parcel?.name ?? ""} /></Field>
+              <Field label="Nombre de la parcela (opcional)"><Input name="name" maxLength={100} defaultValue={parcelCustomName(parcel)} placeholder="Ej. Huerta familiar" /></Field>
               <div className="grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-4">
                 <Field label="Latitud"><Input name="latitude" inputMode="decimal" required value={latitude} onChange={(event) => { setLatitude(event.target.value); setPointChosen(true); clearOutline(); }} /></Field>
                 <Field label="Longitud"><Input name="longitude" inputMode="decimal" required value={longitude} onChange={(event) => { setLongitude(event.target.value); setPointChosen(true); clearOutline(); }} /></Field>

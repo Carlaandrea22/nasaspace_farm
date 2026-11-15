@@ -1,4 +1,6 @@
 import type { Territory } from "../territory/types";
+import type { ConsultationMode } from "./consultation-progress";
+import type { RotationRequest } from "./parcel-rotations";
 
 export const pilotCoordinates = { latitude: -17.42442, longitude: -66.18272 };
 
@@ -9,6 +11,14 @@ export const mapBounds: [[number, number], [number, number]] = [
 
 export type Coordinates = typeof pilotCoordinates;
 export type Parcel = Coordinates & { name: string; areaHa: number | null; outline?: Coordinates[]; territory?: Territory };
+export type SavedParcel = { id: string; name: string; label: string };
+
+export function parcelCustomName(parcel: Parcel | undefined) {
+  if (!parcel) return "";
+  const name = parcel.name?.trim() ?? "";
+  const legacyName = `Parcela ${parcel.latitude.toFixed(5)}, ${parcel.longitude.toFixed(5)}`;
+  return name.replace(/[−–]/g, "-") === legacyName ? "" : name;
+}
 
 export const productionPriorities = ["Producir forraje", "Vender la cosecha", "Usar menos agua", "Diversificar la producción"] as const;
 export type ProductionPriority = typeof productionPriorities[number];
@@ -47,7 +57,10 @@ export type PilotDraft = {
   parcel?: Parcel;
   cropWater?: CropWater;
   cropWaterByParcel?: Record<string, CropWater>;
+  consultation?: SavedConsultation;
 };
+
+export type AccountDraft = PilotDraft & { parcelLabel?: string };
 
 export type DraftPatch = Pick<PilotDraft, "parcel" | "cropWater">;
 
@@ -60,7 +73,31 @@ export type ReportWater = {
   depthMm: number | null;
 };
 
-export type ReportWaterSave = { reportWater: ReportWater; newParcel?: Pick<Parcel, "name" | "areaHa"> };
+export type WaterReportOptions = {
+  reviewed: boolean;
+  period: 7 | 14;
+  delayed: boolean;
+  pastTurn: string;
+  pastDepth: number;
+  initial: "scenario" | "modeled";
+  fraction: number;
+  rainEfficiency: number;
+  irrigationEfficiency: number;
+};
+
+export type SavedWaterReport = { inputs: ReportWater; options?: WaterReportOptions };
+export type SavedRotationReport = { inputs: RotationRequest; seedCosts: Record<string, string> };
+export type SavedConsultation = {
+  parcelKey: string;
+  mode: ConsultationMode;
+  water?: SavedWaterReport;
+  rotations?: SavedRotationReport;
+};
+
+export type ReportSave = (
+  | { reportWater: ReportWater; waterOptions?: WaterReportOptions }
+  | { reportRotation: SavedRotationReport & { location: Coordinates } }
+) & { newParcel?: Pick<Parcel, "name" | "areaHa"> };
 
 export function cropWaterFromReport(previous: CropWater | undefined, parcel: Parcel, report: ReportWater): CropWater {
   return {

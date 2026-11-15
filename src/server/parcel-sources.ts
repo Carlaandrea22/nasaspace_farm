@@ -5,6 +5,11 @@ import { localDate } from '../features/operations/model';
 import { pilotCoordinates, type Coordinates } from '../features/pilot/draft';
 import { readRegionalSmap } from './smap';
 
+type PilotSample = Omit<(typeof pilotSoils.samples)[number], 'verifiedCell'> & {
+  verifiedCell?: { west: number; south: number; east: number; north: number };
+};
+const verifiedSamples: PilotSample[] = pilotSoils.samples;
+
 async function json(url:URL, seconds:number, timeoutMs = 18000) {
   const response=await fetch(url,{next:{revalidate:seconds},signal:AbortSignal.timeout(timeoutMs)});
   if(!response.ok) throw new Error('Fuente no disponible');
@@ -13,11 +18,14 @@ async function json(url:URL, seconds:number, timeoutMs = 18000) {
 
 export async function readParcelSoil(point:Coordinates) {
   const queriedAt=new Date().toISOString();
-  // Use the verified pilot extraction within its existing 100 m reference radius.
-  for (const sample of pilotSoils.samples) {
+  // The checked WCS cell extends beyond the 100 m radius of the pilot point.
+  for (const sample of verifiedSamples) {
     const distance = distanceMeters(point, sample.point);
-    if (distance <= 100) {
-      return {soil:{...sample,distanceM:distance < 1 ? 0 : Math.round(distance)},soilStatus:'available' as const};
+    const { verifiedCell, ...soil } = sample;
+    const sameCell = verifiedCell && point.longitude >= verifiedCell.west && point.longitude < verifiedCell.east &&
+      point.latitude > verifiedCell.south && point.latitude <= verifiedCell.north;
+    if (sameCell || distance <= 100) {
+      return {soil:{...soil,distanceM:distance < 1 ? 0 : Math.round(distance)},soilStatus:'available' as const};
     }
   }
   const distanceFromReference = distanceMeters(point, reference.meta.soilPoint);

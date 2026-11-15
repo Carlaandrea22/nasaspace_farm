@@ -1,6 +1,8 @@
 "use client";
 import Image from 'next/image';
-import { CalendarDays, Check, ChevronRight, Download, Droplet, Droplets, Layers, Leaf, Sprout } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { createPortal } from 'react-dom';
+import { CalendarDays, Check, ChevronRight, Download, Droplet, Droplets, Layers, Leaf, Save, Sprout } from 'lucide-react';
 import { useEffect, useMemo, useState, type SubmitEvent } from 'react';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -8,7 +10,7 @@ import { NativeSelect } from '../../components/ui/native-select';
 import catalogue from '../../data/ecocrop.json';
 import { ecocropSource } from '../../domain/climate/screening';
 import { cropProfiles, scenarioSources } from '../comparison/scenario';
-import { decimal, productionPriorities, type CropWater, type Parcel } from './draft';
+import { decimal, productionPriorities, type CropWater, type Parcel, type SavedRotationReport } from './draft';
 import type { ParcelHistory } from '../../server/parcel-sources';
 import type { ParcelEvidence } from './parcel-decision';
 import type { ConsultationPhase } from './consultation-progress';
@@ -21,20 +23,41 @@ const names = Object.keys(waterCrops);
 const destinations = ['Forraje', 'Venta', 'Consumo', 'Semilla'];
 const fmt = (value: number | null) => value === null ? 'Sin dato' : value.toLocaleString('es-BO', {maximumFractionDigits: 1});
 
-export function RotationDecision({parcel,evidence,known,onProgress}:{parcel:Parcel;evidence?:ParcelEvidence;known?:CropWater;onProgress?:(phase:ConsultationPhase)=>void}) {
-  const [settings,setSettings]=useState<RotationRequest>();
+export function RotationDecision({ parcel, evidence, known, restored, onProgress, autoSave, onSave, saveFooter }: {
+  parcel: Parcel; evidence?: ParcelEvidence; known?: CropWater; restored?: SavedRotationReport;
+  onProgress?: (phase: ConsultationPhase) => void; autoSave: boolean;
+  onSave?: (rotation: SavedRotationReport) => Promise<void>; saveFooter: HTMLDivElement | null;
+}) {
+  const router = useRouter();
+  const [settings,setSettings]=useState<RotationRequest | undefined>(restored?.inputs);
   const [history,setHistory]=useState<ParcelHistory>();
-  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[edit,setEdit]=useState(true);
+  const [busy,setBusy]=useState(Boolean(restored)),[error,setError]=useState(''),[edit,setEdit]=useState(!restored);
   const [downloading,setDownloading]=useState(false);
   const [noticeError,setNoticeError]=useState('');
-  const [seedCosts, setSeedCosts] = useState<Record<string, string>>({});
+  const [seedCosts, setSeedCosts] = useState<Record<string, string>>(restored?.seedCosts ?? {});
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const knownCrop = waterCrops[known?.currentCrop ?? ''] ? known?.currentCrop : known?.firstCrop;
   const knownHarvest = knownCrop === known?.currentCrop ? known?.currentHarvest : known?.firstHarvest;
   const knownPlanting = knownCrop === known?.currentCrop ? known?.currentPlanting : known?.firstPlanting;
   const [selectedCrop, setSelectedCrop] = useState<string>();
   const crop = selectedCrop ?? settings?.crop ?? knownCrop ?? '';
 
-  async function submit(event: SubmitEvent<HTMLFormElement>) {
+  async function saveRotation(inputs: RotationRequest, returnToParcels = false) {
+    if (!onSave || saveStatus === 'saving') return;
+    setSaveStatus('saving');
+    const validCosts = Object.fromEntries(Object.entries(seedCosts)
+      .filter(([, text]) => text.trim().length <= 24 && decimal(text) >= 0)
+      .map(([name, text]) => [name, text.trim()]));
+    try {
+      await onSave({ inputs, seedCosts: validCosts });
+      setSaveStatus('saved');
+      if (returnToParcels) router.push('/la-maica/mi-parcela');
+    } catch {
+      setSaveStatus('error');
+    }
+  }
+
+  function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const field = (name: string) => String(data.get(name) ?? '');
@@ -44,18 +67,33 @@ export function RotationDecision({parcel,evidence,known,onProgress}:{parcel:Parc
     if (!waterCrops[crop] || !validDate(harvest)) return setError('Elige el cultivo e indica cuándo terminarás de cosechar o cortar.');
     if (!waterCrops[habitual] || waterCrops[habitual].cutting) return setError('Elige el cultivo que sueles sembrar después.');
     if (planting && (!validDate(planting) || planting > harvest)) return setError('Revisa el orden de las fechas del cultivo actual.');
-    setSettings({ crop, harvest, planting, habitual, priority: field('priority'), destination: field('destination') });
+    const inputs = { crop, harvest, planting, habitual, priority: field('priority'), destination: field('destination') };
+    setSettings(inputs);
     setError('');setEdit(false);
-    if (history) return;
-    setBusy(true);
-    try {
-      const response = await fetch(`/api/parcel-sources?kind=history&lat=${parcel.latitude}&lon=${parcel.longitude}`, { signal: AbortSignal.timeout(21000) });
-      if (!response.ok) throw new Error();
-      setHistory(await response.json());
-    } catch {
-      setError('No pudimos cargar el clima histórico. Pulsa «Cambiar cultivo o fecha» para volver a intentar.');
-    } finally { setBusy(false); }
+    setSaveStatus('idle');
+    if (!history) setBusy(true);
+    if (autoSave) void saveRotation(inputs);
   }
+
+  useEffect(() => {
+    if (edit || history) return;
+    const controller = new AbortController();
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(21000)]);
+    async function loadHistory() {
+      try {
+        const response = await fetch(`/api/parcel-sources?kind=history&lat=${parcel.latitude}&lon=${parcel.longitude}`, { signal });
+        if (!response.ok) throw new Error();
+        const data = await response.json();
+        if (!controller.signal.aborted) setHistory(data);
+      } catch {
+        if (!controller.signal.aborted) setError('No pudimos cargar el clima histórico. Pulsa «Cambiar cultivo o fecha» para volver a intentar.');
+      } finally {
+        if (!controller.signal.aborted) setBusy(false);
+      }
+    }
+    void loadHistory();
+    return () => controller.abort();
+  }, [edit, history, parcel.latitude, parcel.longitude]);
 
   const soil = evidence?.soil;
   const plan = useMemo(
@@ -64,6 +102,19 @@ export function RotationDecision({parcel,evidence,known,onProgress}:{parcel:Parc
   );
   const alternatives = plan?.options;
   const selected = plan?.selected;
+  const costs = alternatives?.map(({ result, habitual }) => {
+    const [, next] = result.rotation.seasons;
+    const name = next.crop.name;
+    const text = seedCosts[name] ?? '';
+    const value = decimal(text);
+    return { name, habitual, text, cost: Number.isFinite(value) && value >= 0 ? value : null };
+  }) ?? [];
+  const habitualCost = costs.find(({ habitual }) => habitual)?.cost ?? null;
+  function compareCost(cost: number, habitual: boolean) {
+    if (habitual || habitualCost === null) return '';
+    const difference = cost - habitualCost;
+    return ` Diferencia frente a la habitual: ${difference > 0 ? '+' : ''}${fmt(difference)} Bs/ha.`;
+  }
   const phase: ConsultationPhase = edit ? 'editing' : plan ? 'complete' : 'pending';
   useEffect(()=>{onProgress?.(phase);},[phase,onProgress]);
   const resultTitle = selected ? `Para revisar primero: ${selected.rotation.id}` : 'Opciones con restricciones para el destino indicado';
@@ -83,6 +134,9 @@ export function RotationDecision({parcel,evidence,known,onProgress}:{parcel:Parc
         soilSource: `${soil.source}${soil.distanceM > 0 ? `, referencia a ${soil.distanceM} m` : ''}`,
         alternatives: plan.options,
         selected,
+        seedQuotes: costs.flatMap(({ name, cost, habitual }) => cost === null ? [] : [
+          `${name}: ${fmt(cost)} Bs/ha.${compareCost(cost, habitual)}`,
+        ]),
       });
     } catch {
       setNoticeError('No pudimos preparar el aviso. Vuelve a intentar la descarga.');
@@ -118,8 +172,16 @@ export function RotationDecision({parcel,evidence,known,onProgress}:{parcel:Parc
             defaultValue={settings?.crop === crop ? settings.planting : knownCrop === crop ? knownPlanting : ''}/>
         </label>
       </div>
-      <Button type="submit" className="w-full sm:w-fit">Ver qué puedo sembrar</Button>
-    </form> : <Button variant="secondary" disabled={busy} className="consulta-no-imprimir justify-self-start" onClick={()=>{setError('');setEdit(true);}}>Cambiar cultivo o fecha</Button>}
+      <Button type="submit" disabled={saveStatus === 'saving'} className="w-full sm:w-fit">Ver qué puedo sembrar</Button>
+    </form> : <Button variant="secondary" disabled={busy || saveStatus === 'saving'} className="consulta-no-imprimir justify-self-start" onClick={()=>{setError('');setEdit(true);}}>Cambiar cultivo o fecha</Button>}
+    {saveStatus === 'saved' && <p role="status" className="consulta-no-imprimir text-sm font-semibold">Rotación guardada en tu cuenta</p>}
+    {onSave && settings && !edit && saveFooter && createPortal(<>
+      <Button type="button" className="max-sm:w-full" disabled={saveStatus === 'saving'}
+        onClick={() => void saveRotation(settings, true)}>
+        <Save size={18} aria-hidden="true"/> {saveStatus === 'saving' ? 'Guardando…' : 'Guardar y volver a Mis parcelas'}
+      </Button>
+      {saveStatus === 'error' && <p role="alert" className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-red-800">No se pudo guardar la rotación. Intenta de nuevo.</p>}
+    </>, saveFooter)}
     {error && <p role="alert">{error}</p>}
     {busy && <p role="status">Consultando el clima histórico de tu parcela…</p>}
     {!edit && !busy && !error && !soil && <p role="status">{evidence ? 'Faltan datos del suelo para estimar el agua que necesitarían los cultivos.' : 'Consultando el suelo de tu parcela…'}</p>}
@@ -142,12 +204,32 @@ export function RotationDecision({parcel,evidence,known,onProgress}:{parcel:Parc
         {noticeError && <p role="alert" className="text-sm text-red-800">{noticeError}</p>}
       </section>
       <p className="text-sm text-muted">Prioridad: {settings.priority}. Uso de la próxima cosecha: {settings.destination || 'por confirmar'}. Todas las opciones se simulan con el mismo suelo y el mismo historial.</p>
+      <details className="rounded-2xl bg-leaf/35 p-4 text-sm">
+        <summary className="min-h-6 cursor-pointer font-semibold">Comparar costos de semilla (opcional)</summary>
+        <p className="consulta-no-imprimir mt-2 text-muted">
+          Ingresa cuánto gastarías en semilla para sembrar una hectárea. Si cotizaste la rotación habitual, verás cuánto más o menos cuesta cada alternativa.
+        </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          {costs.map(({ name, habitual, text, cost }) => <div key={name} className="min-w-0">
+            <label className="consulta-no-imprimir grid gap-1 font-semibold">
+              {name} (Bs/ha)
+              <Input inputMode="decimal" maxLength={24} value={text} disabled={saveStatus === 'saving'} onChange={event => {
+                const value = event.target.value;
+                setSeedCosts(previous => ({ ...previous, [name]: value }));
+                setSaveStatus('idle');
+              }} />
+            </label>
+            {cost !== null && <p className="mt-1 text-muted">
+              <span className="consulta-filtros-impresos">{name} · </span>
+              Costo declarado: {fmt(cost)} Bs/ha.{compareCost(cost, habitual)}
+            </p>}
+            {text && cost === null && <p className="consulta-no-imprimir mt-1 text-red-800">Escribe un costo mayor o igual a cero.</p>}
+          </div>)}
+        </div>
+      </details>
       <div className="grid min-w-0 gap-4">{alternatives.map(({ result, start, end, estimatedCalendar, habitual }) => {
         const [previous, next] = result.rotation.seasons;
         const crop = next.crop;
-        const costText = seedCosts[crop.name] ?? '';
-        const cost = decimal(costText);
-        const habitualCost = decimal(seedCosts[settings.habitual] ?? '');
         const differentFamily = previous.crop.family && crop.family && previous.crop.family !== crop.family;
         const details = cropProfiles[crop.name];
         const photo = rotationPhotos[crop.name];
@@ -179,18 +261,6 @@ export function RotationDecision({parcel,evidence,known,onProgress}:{parcel:Parc
               </div>;
             })}
           </dl>
-          <label className="consulta-no-imprimir grid max-w-xs gap-1 text-sm font-semibold">
-            Semilla de {crop.name} (Bs/ha, opcional)
-            <Input inputMode="decimal" value={costText} onChange={event => {
-              const value = event.target.value;
-              setSeedCosts(previous => ({ ...previous, [crop.name]: value }));
-            }} />
-          </label>
-          <p className="text-sm text-muted">
-            {Number.isFinite(cost) && cost >= 0
-              ? `Costo declarado: ${fmt(cost)} Bs/ha.${!habitual && Number.isFinite(habitualCost) && habitualCost >= 0 ? ` Diferencia frente a la habitual: ${cost > habitualCost ? '+' : ''}${fmt(cost - habitualCost)} Bs/ha.` : ''}`
-              : costText ? 'Escribe un costo mayor o igual a cero.' : 'Costo de semilla por cotizar.'}
-          </p>
           <details className="rotation-card-detail text-sm">
             <summary>Ver detalles del cultivo <ChevronRight aria-hidden="true"/></summary>
             <ul className="mt-2 list-disc space-y-1 pl-5">

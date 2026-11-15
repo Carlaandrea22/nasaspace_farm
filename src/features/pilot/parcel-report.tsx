@@ -4,7 +4,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Droplets, MapPin, Printer, Scan, Sprout } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
 import { authClient } from "../../lib/browser/auth-client";
 import { ParcelClimate } from "../climate/parcel-climate";
@@ -37,14 +37,24 @@ function ParcelReport({ point, parcel, area, demo, savedParcelId }: {
   point: Coordinates; parcel: boolean; area: number | null; demo?:ReferenceCase; savedParcelId?: string;
 }) {
   const { data: session, isPending } = authClient.useSession();
-  const [decision, setDecision] = useState<{ water?: boolean; rotations?: boolean }>({});
+  const [decision, setDecision] = useState<ConsultationMode | null>();
+  const [resumeFailed, setResumeFailed] = useState(false);
+  const [saveFooter, setSaveFooter] = useState<HTMLDivElement | null>(null);
   const [progress, setProgress] = useState<Record<ConsultationMode, ConsultationPhase>>({water:'editing', rotations:'editing'});
   const updateProgress = useCallback((mode: ConsultationMode, phase: ConsultationPhase) => {
     setProgress(previous => previous[mode] === phase ? previous : {...previous, [mode]: phase});
   }, []);
+  const resume = useCallback((mode: ConsultationMode | null, failed = false) => {
+    setDecision(previous => previous === undefined ? mode : previous);
+    setResumeFailed(failed);
+  }, []);
   const report = useRef<HTMLElement>(null);
   const { latitude, longitude } = point;
   const selectedParcel = useMemo(() => ({ latitude, longitude, name: "", areaHa: area }), [latitude, longitude, area]);
+
+  useEffect(() => {
+    if (savedParcelId && !session && !isPending) window.location.replace("/");
+  }, [savedParcelId, session, isPending]);
 
   function printReport() {
     const closed = report.current?.querySelectorAll<HTMLDetailsElement>("details:not([open])");
@@ -52,6 +62,8 @@ function ParcelReport({ point, parcel, area, demo, savedParcelId }: {
     try { window.print(); }
     finally { closed?.forEach(item => { item.open = false; }); }
   }
+
+  if (savedParcelId && !session) return <p role="status">{isPending ? "Abriendo tu parcela…" : "Volviendo a Explorar…"}</p>;
 
   return <article ref={report} className="consulta-informe grid min-w-0 gap-3">
     <header className="consulta-portada">
@@ -78,30 +90,38 @@ function ParcelReport({ point, parcel, area, demo, savedParcelId }: {
         <p className="mt-1 text-sm">Ya elegiste un lugar con información de suelo disponible. Ahora elige qué quieres consultar y completa los datos del cultivo que quieras probar.</p>
       </div>}
       <div className="consulta-no-imprimir">
-        <ConsultationProgress selected={Boolean(decision.water || decision.rotations)} phase={progress[decision.water ? 'water' : 'rotations']} />
+        {savedParcelId && !demo && decision === undefined
+          ? <p role="status">Abriendo la consulta guardada…</p>
+          : <ConsultationProgress selected={Boolean(decision)} phase={progress[decision ?? 'water']} />}
+        {resumeFailed && <p role="alert" className="mt-2 text-sm text-red-800">
+          No pudimos abrir la consulta guardada.{' '}
+          <button type="button" className="font-semibold underline" onClick={() => window.location.reload()}>Volver a intentar</button>
+        </p>}
         <h2 className="text-xl font-bold">¿Qué quieres hacer en este terreno?</h2>
         <p className="mt-1 text-sm text-muted">Elige una opción para comenzar. Te pediremos los datos que falten.</p>
       </div>
       <div className="consulta-no-imprimir grid gap-3 sm:grid-cols-2">
-        <Button type="button" variant="secondary" className="consultation-choice min-h-16 whitespace-normal px-5 py-3 text-left leading-snug" aria-expanded={Boolean(decision.water)} aria-controls="parcel-water"
-          onClick={() => setDecision(previous => ({ ...previous, water: !previous.water, rotations: previous.rotations && false }))}>
+        <Button type="button" variant="secondary" className="consultation-choice min-h-16 whitespace-normal px-5 py-3 text-left leading-snug" aria-expanded={decision === 'water'} aria-controls="parcel-water"
+          onClick={() => setDecision(previous => previous === 'water' ? null : 'water')}>
           <Droplets size={20} className="shrink-0" aria-hidden="true"/> <span>Ya tengo un cultivo y quiero revisar el agua</span>
         </Button>
-        <Button type="button" variant="secondary" className="consultation-choice min-h-16 whitespace-normal px-5 py-3 text-left leading-snug" aria-expanded={Boolean(decision.rotations)} aria-controls="parcel-rotations"
-          onClick={() => setDecision(previous => ({ ...previous, rotations: !previous.rotations, water: previous.water && false }))}>
+        <Button type="button" variant="secondary" className="consultation-choice min-h-16 whitespace-normal px-5 py-3 text-left leading-snug" aria-expanded={decision === 'rotations'} aria-controls="parcel-rotations"
+          onClick={() => setDecision(previous => previous === 'rotations' ? null : 'rotations')}>
           <Sprout size={20} className="shrink-0" aria-hidden="true"/> <span>Quiero planificar qué sembrar después</span>
         </Button>
       </div>
-      <div className="consulta-decisiones-contenido" hidden={!decision.water&&!decision.rotations}>
-        {(decision.water !== undefined || decision.rotations !== undefined) && (
+      <div className="consulta-decisiones-contenido" hidden={!decision}>
+        {(savedParcelId || decision !== undefined) && (
           isPending && !session && !demo ? <p role="status">Abriendo la consulta…</p> :
-            <ParcelDecision key={session?.user.id ?? "guest"} mode={decision.water ? 'water' : 'rotations'}
-              parcel={selectedParcel} demo={demo} account={Boolean(session)} savedParcelId={savedParcelId} onProgress={updateProgress} />
+            <ParcelDecision key={session?.user.id ?? "guest"} mode={decision ?? null}
+              parcel={selectedParcel} demo={demo} account={Boolean(session)} savedParcelId={savedParcelId}
+              saveFooter={saveFooter} onResume={resume} onProgress={updateProgress} />
         )}
       </div>
     </section>
-    <div className="consulta-no-imprimir justify-self-end">
-      <Button type="button" variant="secondary" className="consulta-imprimir" onClick={printReport}><Printer size={18} aria-hidden="true"/> Imprimir o guardar PDF</Button>
+    <div className="consulta-no-imprimir flex flex-wrap items-start justify-end gap-3">
+      <div ref={setSaveFooter} className="min-w-0 empty:hidden max-sm:w-full" />
+      <Button type="button" variant="secondary" className="consulta-imprimir max-sm:w-full" onClick={printReport}><Printer size={18} aria-hidden="true"/> Imprimir o guardar PDF</Button>
     </div>
   </article>;
 }

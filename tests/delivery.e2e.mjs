@@ -26,6 +26,12 @@ test('Tirani entrega el perfil local sin esperar la humedad modelada', {timeout:
     assert.equal(data.soil.distanceM,10);
     assert.equal(data.soil.profile.length,5);
     assert.equal('moisture' in data,false);
+    const sameCell = await context.request.get(origin+'/api/parcel-sources?kind=soil&lat=-17.34111&lon=-66.15589',{timeout:4000});
+    assert.equal(sameCell.status(),200);
+    const adjacent = await sameCell.json();
+    assert.equal(adjacent.soilStatus,'available');
+    assert.ok(adjacent.soil.distanceM>100);
+    assert.deepEqual(adjacent.soil.profile,data.soil.profile);
 
     await context.route('**/api/parcel-sources?kind=moisture&*',async route=>{
       await pendingMoisture;
@@ -112,8 +118,12 @@ test('consulta pública con fuentes reales, agua, tres rotaciones, impresión y 
     await rotations.getByRole('heading',{name:/Para revisar primero:/}).waitFor();
     assert.equal(await rotations.getByRole('article').count(),3);
     assert.equal(await rotations.getByText('Rotación habitual',{exact:true}).count(),1);
-    await rotations.getByLabel('Semilla de Avena forrajera (Bs/ha, opcional)').fill('80');
-    await rotations.getByRole('article').nth(1).getByLabel(/Semilla de/).fill('90');
+    const seedCostPanel = rotations.locator('details').filter({hasText:'Comparar costos de semilla (opcional)'});
+    await seedCostPanel.getByText('Comparar costos de semilla (opcional)',{exact:true}).waitFor({timeout:6000});
+    assert.equal(await seedCostPanel.getAttribute('open'),null);
+    await seedCostPanel.getByText('Comparar costos de semilla (opcional)',{exact:true}).click();
+    await seedCostPanel.getByLabel('Avena forrajera (Bs/ha)',{exact:true}).fill('80');
+    await seedCostPanel.getByRole('textbox').nth(1).fill('90');
     await rotations.getByText(/Diferencia frente a la habitual: \+10 Bs\/ha/).waitFor();
     assert.equal(await rotations.getByText('Siembra estimada desde',{exact:false}).count(),3);
     await checkSteps(page,4);
@@ -128,6 +138,7 @@ test('consulta pública con fuentes reales, agua, tres rotaciones, impresión y 
     ]);
     assert.match(rotationPdf.suggestedFilename(),/^aviso-siembra-.*\.pdf$/);
     assert.equal((await readFile(await rotationPdf.path())).subarray(0,5).toString(),'%PDF-');
+    await rotationPdf.saveAs('.data-cache/verification/aviso-siembra-costos.pdf');
     await page.setViewportSize({width:1440,height:1000});
     await page.locator('#clima-parcela').getByText('Temperatura media',{exact:true}).waitFor();
     await page.evaluate(()=>{window.print=()=>{window.__printed=true;};});

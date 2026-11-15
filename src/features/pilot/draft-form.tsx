@@ -7,13 +7,12 @@ import { NativeSelect } from "../../components/ui/native-select";
 import { accountDraft } from "../../lib/browser/account-drafts";
 import { authClient } from "../../lib/browser/auth-client";
 import { readPilotDraft, savePilotDraft } from "../../lib/browser/pilot-drafts";
-import type { DraftPatch, PilotDraft } from "./draft";
+import type { AccountDraft, DraftPatch, PilotDraft, SavedParcel } from "./draft";
 
 type Save = (patch: DraftPatch) => Promise<void>;
 type DraftContent = (draft: PilotDraft | undefined, save: Save, status: DraftStatus, markEdited: () => void, parcelId?: string) => ReactNode;
 export type DraftStatus = "idle" | "edited" | "saving" | "saved" | "saved-account" | "error";
 
-type SavedParcel = { id: string; name: string };
 type ParcelControls = {
   list: SavedParcel[];
   show: boolean;
@@ -42,10 +41,12 @@ function AccountWorkspace({ children, userId, showParcels }: { children: DraftCo
       let last: string | null = null;
       try { last = sessionStorage.getItem(storageKey); } catch {}
       setList(items);
-      setSelected(items.find((item) => item.id === last)?.id ?? items[0]?.id ?? "default");
+      setSelected(showParcels && items.length
+        ? crypto.randomUUID()
+        : items.find((item) => item.id === last)?.id ?? items[0]?.id ?? "default");
     }, () => { if (active) setFailed(true); });
     return () => { active = false; };
-  }, [storageKey]);
+  }, [showParcels, storageKey]);
 
   function remember(id: string) {
     try { sessionStorage.setItem(storageKey, id); } catch {}
@@ -107,9 +108,9 @@ function DraftWorkspace({ children, parcelId, controls }: { children: DraftConte
     setStatus("saving");
     try {
       if (parcelId) {
-        const saved = await accountDraft<PilotDraft>(query, "PATCH", patch);
+        const saved = await accountDraft<AccountDraft>(query, "PATCH", patch);
         setDraft({ value: saved });
-        controls?.onSaved({ id: parcelId, name: saved.parcel?.name ?? "" });
+        controls?.onSaved({ id: parcelId, name: saved.parcel?.name ?? "", label: saved.parcelLabel ?? "Parcela guardada" });
         setLocalCopy(undefined);
         setStatus("saved-account");
       } else {
@@ -126,9 +127,9 @@ function DraftWorkspace({ children, parcelId, controls }: { children: DraftConte
     setCopying(true);
     setCopyError("");
     try {
-      const value = await accountDraft<PilotDraft>(query, "PUT", localCopy);
+      const value = await accountDraft<AccountDraft>(query, "PUT", localCopy);
       setDraft({ value });
-      controls?.onSaved({ id: parcelId, name: value.parcel?.name ?? "" });
+      controls?.onSaved({ id: parcelId, name: value.parcel?.name ?? "", label: value.parcelLabel ?? "Parcela guardada" });
       setLocalCopy(undefined);
       setRevision((current) => current + 1);
       setStatus("saved-account");
@@ -159,18 +160,24 @@ function DraftWorkspace({ children, parcelId, controls }: { children: DraftConte
     controls?.select(id);
   }
 
+  const isSaved = controls?.list.some((item) => item.id === parcelId);
+  const labels = new Map<string, number>();
   return <>
-    {controls?.show && <section className="panel mb-5 flex flex-wrap items-end gap-3" aria-label="Mis parcelas">
+    {controls?.show && controls.list.length > 0 && <section className="panel mb-5 flex flex-wrap items-end gap-3" aria-label="Mis parcelas">
       <div className="min-w-0 flex-1">
         <Field label="Parcelas guardadas">
           <NativeSelect value={parcelId} disabled={copying || status === "saving"} onChange={(event) => changeParcel(event.target.value)}>
-            {!controls.list.some((item) => item.id === parcelId) && <option value={parcelId}>Parcela sin guardar</option>}
-            {controls.list.map((item, index) => <option key={item.id} value={item.id}>{item.name || `Parcela ${index + 1}`}</option>)}
+            {!isSaved && <option value={parcelId}>Selecciona una parcela guardada</option>}
+            {controls.list.map((item) => {
+              const number = (labels.get(item.label) ?? 0) + 1;
+              labels.set(item.label, number);
+              return <option key={item.id} value={item.id}>{item.label}{number > 1 ? ` (${number})` : ""}</option>;
+            })}
           </NativeSelect>
         </Field>
       </div>
-      <Button type="button" variant="secondary" disabled={copying || status === "saving" || !controls.list.some((item) => item.id === parcelId)}
-        onClick={() => changeParcel(crypto.randomUUID())}>Nueva parcela</Button>
+      {isSaved && <Button type="button" variant="secondary" disabled={copying || status === "saving"}
+        onClick={() => changeParcel(crypto.randomUUID())}>Nueva parcela</Button>}
     </section>}
     {localCopy && <div className="panel mb-5">
       <p className="text-sm text-muted">Tienes un borrador guardado en este dispositivo. Puedes copiarlo a la cuenta.</p>

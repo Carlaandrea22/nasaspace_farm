@@ -33,18 +33,40 @@ const cropWater = z.object({
 });
 
 export const draftPatchSchema = z.object({ parcel: parcel.optional(), cropWater: cropWater.optional() });
-export const reportWaterPatchSchema = z.strictObject({
+const reportCrop = z.string().refine((name) => Object.hasOwn(waterCrops, name));
+const optionalDate = z.union([z.iso.date(), z.literal("")]);
+const newReportParcel = z.object({ name: z.string().trim().max(100), areaHa: positive }).optional();
+const waterReportPatch = z.strictObject({
   reportWater: z.object({
     location: coordinates,
-    crop: z.string().refine((name) => Object.hasOwn(waterCrops, name)),
+    crop: reportCrop,
     planting: z.iso.date(),
     harvest: z.iso.date(),
-    turn: z.union([z.iso.date(), z.literal("")]),
+    turn: optionalDate,
     depthMm: z.number().positive().max(500).nullable(),
   }).refine(({ planting, harvest, turn, depthMm }) =>
     planting < harvest && (turn ? depthMm !== null && turn <= harvest : depthMm === null)),
-  newParcel: z.object({ name: z.string().trim().min(1).max(100), areaHa: positive }).optional(),
+  waterOptions: z.object({
+    reviewed: z.boolean(), period: z.union([z.literal(7), z.literal(14)]), delayed: z.boolean(),
+    pastTurn: optionalDate, pastDepth: z.number().min(0).max(500),
+    initial: z.enum(["scenario", "modeled"]), fraction: z.number().min(0).max(1),
+    rainEfficiency: z.number().min(0).max(1), irrigationEfficiency: z.number().min(0.01).max(1),
+  }).optional(),
+  newParcel: newReportParcel,
 });
+const rotationReportPatch = z.strictObject({
+  reportRotation: z.object({
+    location: coordinates,
+    inputs: z.object({
+      crop: reportCrop, harvest: z.iso.date(), planting: optionalDate.optional(),
+      habitual: reportCrop.refine((name) => !waterCrops[name]?.cutting),
+      priority: text, destination: text,
+    }).refine(({ planting, harvest }) => !planting || planting <= harvest),
+    seedCosts: z.record(reportCrop, z.string().max(24).regex(/^\d*(?:[.,]\d+)?$/)),
+  }),
+  newParcel: newReportParcel,
+});
+export const reportPatchSchema = z.union([waterReportPatch, rotationReportPatch]);
 export const fullDraftSchema = draftPatchSchema.extend({
   id: z.uuid(),
   version: z.literal(1),
