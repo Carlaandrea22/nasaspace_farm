@@ -8,7 +8,7 @@ import { readPilotDraft, savePilotDraft } from "../../lib/browser/pilot-drafts";
 import type { DraftPatch, PilotDraft } from "./draft";
 
 type Save = (patch: DraftPatch) => Promise<void>;
-type DraftContent = (draft: PilotDraft | undefined, save: Save, status: DraftStatus, markEdited: () => void) => ReactNode;
+type DraftContent = (draft: PilotDraft | undefined, save: Save, status: DraftStatus, markEdited: () => void, account: boolean) => ReactNode;
 export type DraftStatus = "idle" | "edited" | "saving" | "saved" | "saved-account" | "error";
 
 async function accountDraft(method = "GET", data?: DraftPatch | PilotDraft): Promise<PilotDraft | undefined> {
@@ -106,7 +106,7 @@ function DraftWorkspace({ children, account }: { children: DraftContent; account
         onClick={() => void copyLocalDraft()}>{copying ? "Copiando…" : "Copiar borrador a mi cuenta"}</Button>
       {copyError && <p role="alert" className="mt-2 text-sm text-red-800">{copyError}</p>}
     </div>}
-    <Fragment key={revision}>{children(draft.value, save, copying ? "saving" : status, markEdited)}</Fragment>
+    <Fragment key={revision}>{children(draft.value, save, copying ? "saving" : status, markEdited, account)}</Fragment>
   </>;
 }
 

@@ -5,7 +5,7 @@ import { ParcelForm } from "../features/pilot/parcel-form";
 
 export default function HomePage() {
   return (
-    <div className="pb-5">
+    <div className="explore-home pb-5">
       <header className="field-hero">
         <div className="field-hero-copy">
           <p className="field-hero-place"><MapPin size={16} aria-hidden="true" /> Cochabamba, Bolivia</p>

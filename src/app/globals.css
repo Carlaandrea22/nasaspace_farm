@@ -422,6 +422,11 @@ h2 {
   @apply flex min-h-9 items-center gap-2 text-sm font-bold;
 }
 
+.map-controls .map-control-label {
+  justify-content: center;
+  text-align: center;
+}
+
 .map-control-label svg {
   @apply box-content shrink-0 rounded-[9px] bg-[#deedce] p-2 text-[#2e5226];
 }
@@ -437,6 +442,31 @@ h2 {
 .map-separator::before, .map-separator::after {
   content: "";
   @apply h-px flex-1 bg-[#c7d6be];
+}
+
+.map-outline-progress {
+  appearance: none;
+  width: 100%;
+  height: 10px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: #dce7d3;
+}
+
+.map-outline-progress::-webkit-progress-bar {
+  border-radius: inherit;
+  background: #dce7d3;
+}
+
+.map-outline-progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: linear-gradient(90deg, #477538, #88b458);
+}
+
+.map-outline-progress::-moz-progress-bar {
+  border-radius: 999px;
+  background: linear-gradient(90deg, #477538, #88b458);
 }
 
 .map-location {
@@ -561,4 +591,180 @@ h2 {
 @keyframes account-appear {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+.consulta-portada {
+  padding: clamp(20px, 4vw, 42px);
+  border-radius: 24px;
+  color: #f5ffe9;
+}
+.consulta-indicadores > div { padding: 12px; border-radius: 13px; background: #edf4e5; border: 1px solid #d9e6cf; }
+.consulta-indicadores dd { margin-top: 4px; font-size: 1.15rem; color: #203e2a; }
+.consulta-aviso { margin-top: 8px; padding: 10px 12px; border-radius: 9px; background: #f9efcf; color: #61470b; font-size: .875rem; }
+.consulta-aptitud { display: inline-block; margin: 8px 0 4px; padding: 4px 9px; border-radius: 999px; font-size: .82rem; font-weight: 750; background: #eaecea; color: #344034; }
+.consulta-aptitud[data-category="recommended"] { background: #dcefcf; color: #214924; }
+.consulta-aptitud[data-category="conditional"] { background: #f9ebbf; color: #61470b; }
+.consulta-aptitud[data-category="unsuitable"] { background: #f8e2db; color: #762c24; }
+.consulta-filtros-impresos { display: none; }
+@media print {
+  @page { margin: 13mm; }
+  body:has(.consulta-informe), body:has(.consulta-informe) .app-frame, body:has(.consulta-informe) main {
+    display: block; background: white; color: black; padding: 0; margin: 0; max-width: none; width: auto; border: 0; box-shadow: none;
+  }
+  body:has(.consulta-informe) :is(.site-header,.skip-link,.consulta-no-imprimir),
+  body:has(.consulta-informe) .app-frame > :not(main),
+  .consulta-informe button { display: none !important; }
+  .consulta-filtros-impresos { display: block; }
+  .consulta-portada { background: white; color: black; border: 1px solid #c7d2c4; padding: 12px; break-inside: avoid; }
+  .consulta-informe .panel { background: white; color: black; box-shadow: none; }
+  .consulta-cultivo, .consulta-indicadores > div { break-inside: avoid; }
+  .consulta-informe :is(h1,h2,h3) { break-after: avoid; }
+  .consulta-informe .text-muted { color: #333; }
+}
+
+.consulta-portada {
+  background: linear-gradient(95deg,#112c1b 14%,#163927e8 52%,#193b243c),url("/images/parcela-paisaje.webp") center/cover;
+}
+.consulta-portada-contenido { display:grid; gap:24px; align-items:end; padding-top:clamp(12px,4vw,48px); }
+.consulta-portada h1 { max-width:14ch; font-size:clamp(2rem,4.7vw,4rem); line-height:1; font-weight:800; letter-spacing:-.045em; }
+.consulta-portada-resumen { padding:16px; border:1px solid #ecfacb70; border-radius:18px; background:#142c18db; }
+.consulta-portada h2 { font-size:clamp(1.15rem,2vw,1.45rem); font-weight:800; }
+.consulta-resumen { display:flex; flex-wrap:wrap; gap:12px; margin-top:14px; }
+.consulta-resumen > div { padding:10px 14px; border:1px solid #ffffff4d; border-radius:12px; background:#102919aa; }
+.consulta-resumen dt,.consulta-indicadores dt { display:flex; align-items:center; gap:6px; font-size:.85rem; }
+.consulta-resumen dd { font-weight:750; margin-top:4px; }
+.consulta-imprimir { background:#d7ef9e; color:#21351c; }
+.consulta-seccion { border-radius:22px; }
+.consulta-clima {
+  background:linear-gradient(90deg,#f8fbf3 22%,#f8fbf3cc 65%,#f8fbf375),url("/images/valle-cochabamba.jpg") center 53%/cover #f8fbf3;
+}
+.consulta-titulo { display:flex; align-items:center; gap:9px; font-weight:800; font-size:clamp(1.3rem,3vw,1.85rem); color:#173a24; }
+.consulta-titulo svg { box-sizing:content-box; flex:none; width:22px; height:22px; padding:8px; border-radius:11px; background:#daebbf; }
+.consulta-indicadores > div { background:#f3f8ecf5; }
+.consulta-indicadores svg { width:17px; height:17px; flex:none; color:#3a6739; }
+.consulta-indicadores dd { font-size:clamp(1rem,2vw,1.25rem); }
+.consulta-grupo { margin-top:16px; padding:clamp(10px,2vw,16px); border-radius:16px; background:#eef2eb; }
+.consulta-grupo h3 { font-weight:800; }
+.consulta-grupo[data-category="recommended"] { background:#e4efd6; color:#234925; }
+.consulta-grupo[data-category="conditional"] { background:#f9efd5; color:#65490d; }
+.consulta-grupo[data-category="unsuitable"] { background:#fae7e2; color:#762c24; }
+.consulta-cultivo { color:#203426; }
+.consulta-cultivo-foto { position:relative; aspect-ratio:16/9; background:#dce9cf; }
+.consulta-cultivo-foto img { object-fit:cover; }
+.consulta-detalles { display:grid; gap:12px; margin-top:14px; align-items:start; }
+.consulta-detalle {
+  min-width:0; overflow:hidden; border:1px solid #d9e4d4; border-radius:16px; padding:0 12px 12px; font-size:.9rem;
+  --foto-detalle:url("/images/valle-cochabamba.jpg");
+}
+.consulta-detalle-metodo { --foto-detalle:url("/images/informe/haba.webp"); }
+.consulta-detalle-estacional { --foto-detalle:url("/images/informe/cebada.webp"); }
+.consulta-detalle:not([open]) { padding-bottom:0; }
+.consulta-detalle > summary {
+  display:flex; align-items:end; gap:10px; min-height:132px; margin:0 -12px; padding:14px;
+  cursor:pointer; font-weight:750; color:white;
+  background:linear-gradient(0deg,#142b16f5,#142b161a),var(--foto-detalle) center/cover #2b4931;
+}
+.consulta-detalle > summary::-webkit-details-marker { display:none; }
+.consulta-detalle > summary:focus-visible { outline:3px solid #d8f6a2; outline-offset:-4px; }
+.consulta-detalle > summary span { flex:1; }
+.consulta-detalle > summary svg { flex:none; width:20px; height:20px; color:#dcf7b6; }
+.consulta-detalle[open] > summary svg:last-child { transform:rotate(180deg); }
+.consulta-detalle[open] { grid-column:1/-1; }
+.consulta-detalle .panel { margin-top:8px; padding:12px; }
+.consulta-informe { container-type:inline-size; color:#151b15; }
+.consulta-informe .panel { padding:clamp(13px,2cqi,24px); background-color:#fafbf5ee; }
+.consulta-portada {
+  border:2px solid #ffffffdd;
+  background:linear-gradient(180deg,#f6f8f1ee 0%,#f6f8f1b0 15%,transparent 31%,#142710d6 100%),
+    url("/images/informe/avena.webp") center 52%/cover #263e24;
+}
+.consulta-portada > a { color:#192b1c; }
+.consulta-portada h1 { max-width:20ch; font-size:clamp(2rem,4.2cqi,3.65rem); }
+.consulta-etiqueta {
+  display:inline-flex; align-items:center; gap:8px; margin-bottom:10px; padding:7px 13px;
+  border-radius:999px; background:#d6eda9; color:#162915; font-size:.9rem; font-weight:800;
+}
+.consulta-portada-resumen { background:#192e15df; border-radius:20px; }
+.consulta-resumen > div { padding:0 0 0 39px; position:relative; background:none; border:0; border-radius:0; }
+.consulta-resumen > div + div { border-left:1px solid #ffffff66; padding-left:46px; }
+.consulta-resumen dt svg { position:absolute; left:0; top:4px; width:29px; height:29px; }
+.consulta-resumen > div + div svg { left:9px; }
+.consulta-clima {
+  background-image:linear-gradient(90deg,#fafbf5 24%,#fafbf5be 53%,#fafbf524),
+    linear-gradient(0deg,#f6f8efbd,transparent),url("/images/valle-cochabamba.jpg");
+}
+.consulta-indicadores {
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  grid-auto-rows:1fr;
+  margin-bottom:0;
+}
+.consulta-indicadores > div {
+  position:relative; display:grid; align-content:center;
+  padding:12px 9px 12px clamp(31px,5cqi,48px);
+  border-color:#fff; border-radius:17px; background:#edf3e4f2;
+}
+.consulta-indicadores dt { font-size:.75rem; font-weight:650; }
+.consulta-indicadores dt svg { position:absolute; left:9px; top:50%; width:clamp(17px,2.9cqi,32px); height:auto; transform:translateY(-50%); }
+.consulta-indicadores dd { color:#111914; line-height:1.12; }
+.consulta-filtros > summary { display:inline-flex; align-items:center; gap:7px; cursor:pointer; color:#315426; font-size:.85rem; font-weight:750; }
+.consulta-grupos { display:grid; gap:12px; margin-top:14px; }
+.consulta-grupos > .consulta-aviso { grid-column:1/-1; margin:0; }
+.consulta-grupo { margin:0; min-width:0; border-radius:20px; }
+.consulta-grupo[data-category="recommended"] { background:linear-gradient(135deg,#e5efd3,#f1f5e8); }
+.consulta-grupo[data-category="unsuitable"] { background:linear-gradient(135deg,#f9e5e3,#f9eeeb); }
+.consulta-grupo-titulo { display:flex; align-items:center; gap:10px; }
+.consulta-grupo-titulo > svg { flex:none; width:34px; height:34px; padding:6px; border-radius:50%; background:#42723b; color:white; }
+[data-category="unsuitable"] > .consulta-grupo-titulo > svg { background:#c84842; }
+.consulta-grupo-titulo p { font-size:.8rem; }
+.consulta-cultivos-lista { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-rows:1fr; gap:10px; margin-top:14px; }
+.consulta-cultivo { display:flex; flex-direction:column; }
+.consulta-cultivo-foto { aspect-ratio:2.18; }
+.consulta-cultivo-contenido { display:flex; flex:1; flex-direction:column; align-items:flex-start; padding:10px; }
+.consulta-cultivo-detalles { width:100%; margin-top:auto; }
+.consulta-cultivo h4 svg { flex:none; color:#316429; }
+.consulta-cultivo-detalles > summary { display:flex; align-items:center; gap:7px; justify-content:flex-end; cursor:pointer; min-height:44px; }
+.consulta-cultivo-detalles > summary::-webkit-details-marker { display:none; }
+.consulta-cultivo-detalles > summary svg { flex:none; box-sizing:content-box; padding:6px; border:1px solid #c1d6b7; border-radius:50%; color:#203020; }
+.consulta-cultivo-detalles[open] > summary svg { transform:rotate(90deg); }
+.consulta-ciclos { display:flex; flex:1; height:7px; overflow:hidden; border-radius:99px; background:#dce0d9; }
+.consulta-ciclos span { background:#6aaa47; }
+.consulta-ciclos span + span { background:#edc55f; }
+[data-category="unsuitable"] .consulta-ciclos span + span { background:#e5776d; }
+.consulta-detalle > summary { align-items:flex-end; min-height:145px; }
+.consulta-detalle > summary small { display:block; font-size:.72rem; font-weight:500; }
+.consulta-detalle > summary svg:first-child { width:29px; height:29px; }
+.consulta-detalle > summary svg:last-child { box-sizing:content-box; width:15px; height:15px; padding:6px; border-radius:50%; background:#ddf2b4; color:#173419; }
+.consulta-detalle[open] > summary svg:last-child { transform:rotate(90deg); }
+@container (min-width:760px) {
+  .consulta-indicadores { grid-template-columns:repeat(5,minmax(0,1fr)); }
+  .consulta-grupos { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .consulta-grupo { display:grid; grid-row:span 2; grid-template-rows:subgrid; row-gap:14px; }
+  .consulta-cultivos-lista { margin-top:0; }
+}
+@container (max-width:340px) {
+  .consulta-cultivos-lista { grid-template-columns:1fr; }
+}
+@media screen {
+  .app-frame main:has(> :is(.explore-home,.consulta-informe)) { background:none; border:0; box-shadow:none; }
+}
+@media screen and (min-width:55rem) {
+  .app-frame:has(main > :is(.explore-home,.consulta-informe)) { grid-template-columns:clamp(145px,12vw,180px) minmax(0,1fr); gap:12px; padding:12px 12px 48px; }
+  .app-frame main:has(> :is(.explore-home,.consulta-informe)) { padding:0; }
+}
+@media (min-width:900px) {
+  .consulta-portada-contenido { grid-template-columns:1.2fr 1fr; }
+  .consulta-detalles { grid-template-columns:repeat(3,minmax(0,1fr)); }
+}
+@media print {
+  .consulta-portada,.consulta-portada-resumen,.consulta-resumen > div,.consulta-detalle > summary { background:white; color:black; }
+  .consulta-portada-contenido { display:block; padding:0; }
+  .consulta-detalles { display:block; }
+  .consulta-detalle { margin-top:8px; }
+  .consulta-detalle > summary { min-height:0; padding:8px 12px; }
+  .consulta-cultivo-foto,.consulta-detalle > summary svg { display:none; }
+  .consulta-resumen > div { border-color:#c7d2c4; }
+  .consulta-grupo { color:black !important; }
+  .consulta-grupos { display:block; }
+  .consulta-grupo { display:block; margin-top:12px; }
+  .consulta-etiqueta { background:white; color:black; padding-left:0; }
 }

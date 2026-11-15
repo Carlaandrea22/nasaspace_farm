@@ -10,3 +10,4 @@
 /.secrets/
 /AGENTS.md
 __pycache__/
+/public/maplibre-worker.mjs

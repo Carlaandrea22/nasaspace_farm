@@ -10,10 +10,13 @@
     "build": "next build && node scripts/build-service-worker.mjs",
     "lint": "eslint .",
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test tests/*.test.*",
-    "test:e2e": "node --test tests/mvp.e2e.mjs"
+    "test:e2e": "node --test tests/mvp.e2e.mjs",
+    "prebuild": "node scripts/copiar-worker.mjs",
+    "predev": "node scripts/copiar-worker.mjs"
   },
   "dependencies": {
     "@fontsource-variable/dm-sans": "5.3.0",
+    "@maplibre/maplibre-gl-leaflet": "0.1.4",
     "@radix-ui/react-slot": "1.5.0",
     "better-auth": "1.7.25",
     "class-variance-authority": "0.7.1",
@@ -21,6 +24,7 @@
     "gsap": "3.15.1",
     "leaflet": "1.9.4",
     "lucide-react": "1.73.0",
+    "maplibre-gl": "6.18.0",
     "next": "16.4.6",
     "pg": "8.23.1",
     "react": "19.3.1",
