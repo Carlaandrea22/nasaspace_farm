@@ -4,11 +4,11 @@ import type { FeatureCollection, GeoJsonObject, MultiPolygon, Polygon } from "ge
 import * as L from "leaflet";
 import { maplibreGL } from "@maplibre/maplibre-gl-leaflet";
 import { setWorkerUrl } from "maplibre-gl";
-import { Crop, Crosshair, Layers2, MapPinned } from "lucide-react";
+import { Crop, Crosshair, Layers2, LocateFixed, MapPinned } from "lucide-react";
 import { useCallback, useEffect, useEffectEvent, useId, useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
 import { NativeSelect } from "../../components/ui/native-select";
-import { getReferenceCase } from "../territory/reference";
+import { getReferenceCase, referenceCases, type ReferenceCase } from "../territory/reference";
 import { layerNames, type TerritoryLayer } from "../territory/types";
 import { inMap, type Coordinates } from "./draft";
 import "leaflet/dist/leaflet.css";
@@ -74,6 +74,8 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const marker = useRef<L.CircleMarker | null>(null);
+  const gps = useRef<L.LayerGroup | null>(null);
+  const manualAction = useRef(0);
   const pendingClick = useRef<number | undefined>(undefined);
   const districtBounds = useRef(new Map<string, L.LatLngBounds>());
   const focusedDistrict = useRef("");
@@ -87,6 +89,8 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
   const [districtError, setDistrictError] = useState(false);
   const [online, setOnline] = useState(() => navigator.onLine);
   const [satellite, setSatellite] = useState(overview);
+  const [locationStatus, setLocationStatus] = useState("");
+  const [locating, setLocating] = useState(false);
   const [satelliteError, setSatelliteError] = useState(false);
   const [baseResult, setBaseResult] = useState<{ region: string; status: "ready" | "error" }>();
   const [layer, setLayer] = useState<TerritoryLayer | "">("");
@@ -157,9 +161,13 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
       interactive: false, pane: "parcel-point",
     }).addTo(map);
 
-    map.on("dragstart zoomstart dblclick", cancelMapClick);
+    map.on("dragstart zoomstart dblclick", () => {
+      cancelMapClick();
+      manualAction.current += 1;
+    });
     map.on("click", (event: L.LeafletMouseEvent) => {
       const { latlng } = event;
+      manualAction.current += 1;
       afterSingleClick(event, () => handleTerrain({ latitude: latlng.lat, longitude: latlng.lng }));
     });
     function updateLabels() {
@@ -188,6 +196,7 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
       resize.disconnect();
       cancelMapClick();
       marker.current = null;
+      gps.current = null;
       mapRef.current = null;
       map.remove();
     };
@@ -393,6 +402,7 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
   }, [layer]);
 
   function focusDistrict(code: string) {
+    manualAction.current += 1;
     cancelMapClick();
     setDistrict(code);
     focusedDistrict.current = code;
@@ -401,6 +411,52 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
     const bounds = districtBounds.current.get(code);
     if (bounds) map.fitBounds(bounds, { padding: [24, 24], maxZoom: 16, animate: false });
     else showCityOverview(map);
+  }
+
+  function visitReference(key: ReferenceCase) {
+    manualAction.current += 1;
+    const map = mapRef.current;
+    if (!map) return;
+    cancelMapClick();
+    setDistrict(referenceCases[key].district);
+    focusedDistrict.current = referenceCases[key].district;
+    setDrawing(false);
+    setVertices([]);
+    setDrawError("");
+    // Navigation only: the user chooses the point or draws the parcel afterwards.
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) map.setView(point(referenceCases[key]), 17, { animate: false });
+    else map.flyTo(point(referenceCases[key]), 17, { duration: 0.55 });
+  }
+
+  function locate() {
+    const map = mapRef.current;
+    if (!map || !navigator.geolocation) {
+      setLocationStatus("La ubicación no está disponible en este navegador.");
+      return;
+    }
+    const requestVersion = manualAction.current;
+    setLocating(true);
+    setLocationStatus("Buscando tu ubicación…");
+    navigator.geolocation.getCurrentPosition(({ coords }) => {
+      if (mapRef.current !== map) return;
+      setLocating(false);
+      const position: L.LatLngTuple = [coords.latitude, coords.longitude];
+      if (!cityBounds.contains(position)) {
+        setLocationStatus("Tu ubicación está fuera de la vista de Cochabamba.");
+        return;
+      }
+      gps.current?.remove();
+      gps.current = L.layerGroup([
+        L.circle(position, { radius: coords.accuracy, color: "#60a5fa", weight: 1, interactive: false, pane: "parcel-point" }),
+        L.circleMarker(position, { radius: 8, color: "white", weight: 3, fillColor: "#2563eb", fillOpacity: 1, interactive: false, pane: "parcel-point" }),
+      ]).addTo(map);
+      if (manualAction.current === requestVersion) map.setView(position, coords.accuracy < 100 ? 17 : 15, { animate: false });
+      setLocationStatus("El punto azul indica tu ubicación aproximada. Toca el terreno para elegir tu parcela.");
+    }, () => {
+      if (mapRef.current !== map) return;
+      setLocating(false);
+      setLocationStatus("No se pudo obtener tu ubicación. Puedes marcar un punto a mano.");
+    }, { timeout: 8000, maximumAge: 60000 });
   }
 
   return (
@@ -453,7 +509,7 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
           <span className="map-gesture-hint-pointer">Usa la rueda sobre el mapa para acercar o alejar.</span>
           <span className="map-gesture-hint-touch">Pellizca con dos dedos para acercar o alejar. Arrastra para moverte.</span>
         </p>
-        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-2 text-sm font-semibold">
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm font-semibold">
           <label className="inline-flex min-h-11 items-center gap-1.5"><input type="checkbox" className="size-4 accent-action" checked={showDistricts} onChange={(event) => setShowDistricts(event.target.checked)} /> Distritos</label>
           <label className="inline-flex min-h-11 items-center gap-1.5"><input type="checkbox" className="size-4 accent-action" checked={satellite && online} disabled={!online} onChange={(event) => {
             setSatelliteError(false);
@@ -464,10 +520,15 @@ export default function ParcelMap({ selected, onSelect, onView, overview, outlin
             focusDistrict("");
           }}><MapPinned size={17} aria-hidden="true" /> Ver todos los distritos</Button>
           <Button type="button" variant="secondary" className="max-sm:flex-auto" onClick={() => {
+            manualAction.current += 1;
             const center = mapRef.current?.getCenter();
             if (center) onSelect({ latitude: center.lat, longitude: center.lng });
           }}><Crosshair size={17} aria-hidden="true" /> Marcar centro</Button>
+          <Button type="button" variant="secondary" onClick={locate} disabled={locating}><LocateFixed size={17} aria-hidden="true" /> Usar mi ubicación</Button>
+          <Button type="button" variant="secondary" onClick={() => visitReference("tunari")}>Tirani</Button>
+          <Button type="button" variant="secondary" onClick={() => visitReference("la-maica")}>La Maica</Button>
         </div>
+        {locationStatus && <p className="mt-2 text-sm text-muted" role="status">{locationStatus}</p>}
         {districtError && showDistricts && <p role="status" className="mt-2 text-sm text-muted">No se pudieron cargar los distritos de referencia.</p>}
         {satellite && (!online || satelliteError) && <p role="status" className="mt-2 text-sm text-muted">Imágenes satelitales no disponibles. El mapa local sigue activo.</p>}
         {layer && <p className="mt-1 text-sm text-muted"><a className="underline" target="_blank" rel="noreferrer" href={`/api/territory?operation=legend&layer=${layer}`}>Abrir leyenda de {layerNames[layer]}</a></p>}

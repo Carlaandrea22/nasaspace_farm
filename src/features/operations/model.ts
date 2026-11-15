@@ -7,9 +7,9 @@ export const inspectionThreshold = 30;
 export const timeZone = "America/La_Paz";
 export const forecastHorizonDays = 14;
 
-export type WeatherDay = { date: string; rain: number | null; et0: number | null; minimum: number | null; maximum?: number | null; humidity?: number | null };
+export type WeatherDay = { date: string; rain: number | null; et0: number | null; minimum: number | null; maximum?: number | null; humidity?: number | null; rainSource?: "imerg-early" | "modeled" | "missing" };
 export type RecentRain = { date: string; rain: number | null; source: "imerg-early" | "modeled" | "missing" };
-export type Forecast = { today: string; queriedAt: string; days: WeatherDay[]; recent: RecentRain[] };
+export type Forecast = { today: string; queriedAt: string; days: WeatherDay[]; recent: RecentRain[]; history?: WeatherDay[] };
 export type TerritoryExposure = Pick<Territory, "source" | "queriedAt" | "district" | "drainage">;
 
 const fullDate = /^\d{4}-\d{2}-\d{2}$/;
@@ -76,7 +76,9 @@ export function toForecast(input: unknown, queriedAt: string, early: Record<stri
     return { date, rain: observed ?? estimated, source: observed !== null ? "imerg-early" : estimated !== null ? "modeled" : "missing" };
   });
 
-  return { today, queriedAt, days, recent };
+  const history=Array.from(rows.values()).filter(d=>d.date>=addDays(today,-7)&&d.date<today).sort((a,b)=>a.date.localeCompare(b.date))
+    .map(d=>{const observed=metric(early[d.date]);return {...d,rain:observed??d.rain,rainSource:observed!==null?'imerg-early' as const:d.rain!==null?'modeled' as const:'missing' as const};});
+  return { today, queriedAt, days, recent, history };
 }
 
 export const heatThreshold = 32;

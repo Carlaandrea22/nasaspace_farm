@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CalendarDays, CloudRain } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import { Button } from "../../components/ui/button";
+import { cropProgress, dayDistance, type Crop } from "../../domain/water-balance/model";
 import { ClimateNotices } from "../climate/climate-notices";
 import { DraftForm, DraftHeader } from "../pilot/draft-form";
 import { cropForParcel, locationKey, pilotCoordinates, type Coordinates, type CropWater, type Parcel } from "../pilot/draft";
@@ -89,7 +90,7 @@ function useWeather({ latitude, longitude }: Coordinates) {
   return { weather, territory, update };
 }
 
-function currentCrop(cropWater: CropWater | undefined, today: string) {
+function currentCrop(cropWater: CropWater | undefined, today: string, harvest?: string) {
   if (!cropWater) return { name: "Cultivo actual por registrar", stage: "Etapa por confirmar" };
   const campaigns = [
     { name: cropWater.firstCrop, start: cropWater.firstPlanting, end: cropWater.firstHarvest },
@@ -102,21 +103,26 @@ function currentCrop(cropWater: CropWater | undefined, today: string) {
   const match = applicable.length === 1 ? applicable[0] : undefined;
   return {
     name: declared || match?.name || "Cultivo actual por registrar",
-    stage: cropStage(planting || match?.start || "", match?.end || "", today),
+    stage: cropStage(planting || match?.start || "", harvest || match?.end || "", today),
   };
 }
 
-function OperationalPlan({ cropWater, forecast, cached }: { cropWater?: CropWater; forecast: Forecast | null; cached: boolean }) {
+function OperationalPlan({ cropWater, forecast, cached, consultation, harvest, profile }: { cropWater?: CropWater; forecast: Forecast | null; cached: boolean; consultation?: boolean; harvest?: string; profile?: Crop }) {
   const today = localDate(new Date().toISOString());
-  const crop = currentCrop(cropWater, today);
+  const crop = currentCrop(cropWater, today, harvest);
   const turnDate = cropWater?.turnDate;
   const turnClosed = cropWater?.turnStatus === "Aplicado" || cropWater?.turnStatus === "Cancelado" || Boolean(turnDate && turnDate < today);
   const turn = !cached && !turnClosed && turnDate && forecast?.days.find((day) => day.date === turnDate);
+  const planting = cropWater?.currentPlanting;
+  const day = planting && turnDate ? dayDistance(planting, turnDate) : NaN;
+  const duration = planting && harvest ? dayDistance(planting, harvest) : NaN;
+  const demand = profile && turn && turn.et0 !== null && day >= 0 && day < duration
+    ? turn.et0 * cropProgress(day, duration, profile.kc).kc : null;
 
   return (
     <section aria-labelledby="operating-title" className="panel grid gap-4 md:grid-cols-[1fr_1fr_1.55fr]">
       <div>
-        <h2 id="operating-title" className="flex items-center gap-2 text-sm font-semibold"><CalendarDays size={18} aria-hidden="true" /> Turno declarado</h2>
+        <h2 id="operating-title" className="flex items-center gap-2 text-sm font-semibold"><CalendarDays size={18} aria-hidden="true" /> Riego previsto</h2>
         <p className="mt-1 text-2xl font-bold">{turnDate ? formatDate(turnDate) : "Por registrar"}</p>
         {cropWater?.turnStatus && <p className="text-sm text-muted">{cropWater.turnStatus}</p>}
       </div>
@@ -128,11 +134,12 @@ function OperationalPlan({ cropWater, forecast, cached }: { cropWater?: CropWate
       <div className="border-t border-line pt-4 md:border-t-0 md:border-l md:pt-0 md:pl-5">
         <p className="font-semibold">Qué revisar con el regante</p>
         <p className="mt-1 text-sm leading-relaxed text-muted">
-          {turnClosed ? "Registra el próximo turno con el regante y comprueba la humedad del suelo antes de ajustar la siguiente aplicación." : turn && turn.rain !== null
-            ? `El modelo estima ${amount(turn.rain)} para la fecha del turno. Revisa la humedad del suelo y confirma el horario y el caudal antes de ajustar el riego.`
-            : "Revisa la humedad del suelo y confirma fecha, horario y caudal del turno antes de decidir cuánto regar."}
+          {turnClosed ? "Indica la próxima fecha de riego y comprueba la humedad del suelo antes de ajustar la siguiente aplicación." : turn && turn.rain !== null
+            ? `El modelo estima ${amount(turn.rain)} para el día del riego. Revisa la humedad del suelo y confirma el horario y el caudal antes de ajustar el riego.`
+            : "Revisa la humedad del suelo y confirma fecha, horario y caudal del riego antes de decidir cuánto regar."}
         </p>
-        <Button asChild variant="secondary" className="mt-3"><a href="/la-maica/mi-cultivo-y-mi-agua">Editar mi turno y cultivo</a></Button>
+        {demand !== null && <p className="mt-2 text-sm text-muted">Demanda estimada del cultivo el día del riego: {amount(demand)}. Confirma la humedad del suelo antes de decidir la cantidad de agua.</p>}
+        {!consultation && <Button asChild variant="secondary" className="mt-3"><a href="/la-maica/mi-cultivo-y-mi-agua">Editar mi riego y cultivo</a></Button>}
       </div>
     </section>
   );
@@ -154,8 +161,10 @@ function HorizonSummary({ title, days }: { title: string; days: WeatherDay[] }) 
   );
 }
 
-function ForecastDetails({ forecast }: { forecast: Forecast }) {
-  const [period, setPeriod] = useState<7 | 14>(7);
+function ForecastDetails({ forecast, period: selectedPeriod, onPeriodChange }: { forecast: Forecast; period?:7|14; onPeriodChange?:(period:7|14)=>void }) {
+  const [ownPeriod, setOwnPeriod] = useState<7 | 14>(7);
+  const period=selectedPeriod??ownPeriod;
+  const setPeriod=onPeriodChange??setOwnPeriod;
   const days = horizon(forecast.days, forecast.today, period);
   return (
     <section aria-labelledby="forecast-title" className="panel">
@@ -167,7 +176,7 @@ function ForecastDetails({ forecast }: { forecast: Forecast }) {
       </div>
       <div aria-live="polite">
         <HorizonSummary title={`Próximos ${period} días`} days={days} />
-        {period === 14 && <p className="mb-3 rounded-lg bg-leaf/65 p-2.5 text-sm leading-relaxed text-muted">La segunda semana tiene mayor incertidumbre. Confirma el pronóstico más cerca del turno.</p>}
+        {period === 14 && <p className="mb-3 rounded-lg bg-leaf/65 p-2.5 text-sm leading-relaxed text-muted">La segunda semana tiene mayor incertidumbre. Confirma el pronóstico más cerca del día de riego.</p>}
       </div>
       <details className="border-y border-line py-3 text-sm">
         <summary className="min-h-8 cursor-pointer font-semibold">Ver datos por día</summary>
@@ -229,9 +238,12 @@ function Inspection({ sheet }: { sheet: NonNullable<ReturnType<typeof buildInspe
   );
 }
 
-function ForecastPanel({ parcel, cropWater }: { parcel?: Parcel; cropWater?: CropWater }) {
+export type ForecastAvailability = 'loading' | 'available' | 'unavailable' | 'cached';
+export function ForecastPanel({ parcel, cropWater, consultation, harvest, profile, onForecast, onAvailability, period, onPeriodChange }: { parcel?: Parcel; cropWater?: CropWater; consultation?: boolean; harvest?: string; profile?: Crop; onForecast?: (forecast: Forecast | undefined) => void; onAvailability?: (status:ForecastAvailability)=>void; period?:7|14; onPeriodChange?:(period:7|14)=>void }) {
   const { weather, territory, update } = useWeather(parcel ?? pilotCoordinates);
   const { forecast, cached, done } = weather;
+  useEffect(() => { onForecast?.(cached ? undefined : forecast ?? undefined); }, [forecast, cached, onForecast]);
+  useEffect(() => { onAvailability?.(!done?'loading':cached?'cached':forecast?'available':'unavailable'); }, [done,cached,forecast,onAvailability]);
   const sheet = done && forecast && !cached ? buildInspection(forecast, territory) : null;
   const heavy = done && forecast && !cached ? inspectionSignal(forecast) : null;
   const parcelKey = locationKey(parcel ?? pilotCoordinates);
@@ -239,17 +251,17 @@ function ForecastPanel({ parcel, cropWater }: { parcel?: Parcel; cropWater?: Cro
 
   return (
     <>
-      <OperationalPlan cropWater={associated ? cropWater : undefined} forecast={forecast} cached={cached} />
+      {(!consultation || (associated && cropWater?.currentCrop)) && <OperationalPlan cropWater={associated ? cropWater : undefined} forecast={forecast} cached={cached} consultation={consultation} harvest={harvest} profile={profile} />}
       <div className="my-7 flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm text-muted" role="status">
-          <p>{parcel?.name || (parcel ? "Parcela guardada" : "Punto de referencia de La Maica")}</p>
+          <p>{consultation ? "Ubicación seleccionada en el informe" : parcel?.name || (parcel ? "Parcela guardada" : "Punto de referencia de La Maica")}</p>
           {!done && <p>Consultando el pronóstico…</p>}
           {done && forecast && <p>{cached ? "Última consulta guardada" : "Consultado"} el {clock.format(new Date(forecast.queriedAt))}, hora de Cochabamba.</p>}
         </div>
         <Button type="button" variant="secondary" onClick={update} disabled={!done}>Actualizar pronóstico</Button>
       </div>
       {done && !forecast && <Alert role="note" className="mb-7"><AlertTitle>Pronóstico no disponible</AlertTitle><AlertDescription>No hay datos guardados para este punto. Vuelve a consultar con conexión.</AlertDescription></Alert>}
-      {cached && <Alert role="note" className="mb-7"><AlertTitle>Pronóstico de una consulta anterior</AlertTitle><AlertDescription>Consulta la fecha indicada y actualiza antes de ajustar el turno.</AlertDescription></Alert>}
+      {cached && <Alert role="note" className="mb-7"><AlertTitle>Pronóstico de una consulta anterior</AlertTitle><AlertDescription>Consulta la fecha indicada y actualiza antes de ajustar el riego.</AlertDescription></Alert>}
       <ClimateNotices forecast={forecast} cached={cached} parcelKey={parcelKey} />
       {sheet && <Inspection sheet={sheet} />}
       {heavy && !sheet && <Alert role="note" className="mb-7"><AlertTitle>Señal de lluvia intensa</AlertTitle><AlertDescription>
@@ -273,7 +285,7 @@ function ForecastPanel({ parcel, cropWater }: { parcel?: Parcel; cropWater?: Cro
             </ul>
             <p className="mt-3 text-sm leading-relaxed text-muted">Los días recientes usan IMERG Early cuando hay una extracción aplicable. La alternativa modelada se identifica por día.</p>
           </section>
-          <ForecastDetails forecast={forecast} />
+          <ForecastDetails forecast={forecast} period={period} onPeriodChange={onPeriodChange} />
         </div>
       )}
       <details className="mt-7 border-t border-line pt-3 text-sm">
@@ -288,7 +300,7 @@ function ForecastPanel({ parcel, cropWater }: { parcel?: Parcel; cropWater?: Cro
 export function NextTurn() {
   return (
     <div className="py-8 sm:py-10">
-      <DraftHeader cover="water" title="Mi próximo turno" description="Consulta la lluvia esperada antes de regar." />
+      <DraftHeader cover="water" title="Mi próximo riego" description="Consulta la lluvia esperada antes de regar." />
       <DraftForm>{(draft) => <ForecastPanel parcel={draft?.parcel} cropWater={cropForParcel(draft)} />}</DraftForm>
     </div>
   );

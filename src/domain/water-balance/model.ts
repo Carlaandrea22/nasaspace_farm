@@ -12,6 +12,7 @@ export type Crop = {
   seedMonths: readonly number[];
   use: "forage" | "grain";
   frostC?: number;
+  family?: "cereal" | "legume";
 };
 export type Season = { start: string; end: string; crop: Crop };
 export type Rotation = { id: string; seasons: Season[]; restrictions: string[] };
@@ -135,6 +136,43 @@ export function cropProgress(index: number, duration: number, [initial, mid, end
   return { stage: "Fin de ciclo", kc: mid + (end - mid) * (fraction - 0.8) / 0.2, covered: true };
 }
 
+/** Short-term screening, not a hydraulic flood model. Missing days invalidate the balance. */
+export function forecastBalance(input: {
+  days: Day[]; soil: SoilLayer[]; crop: Crop; planting: string; harvest: string;
+  initialFraction: number; turns: Turn[]; rainEfficiency: number; irrigationEfficiency: number;
+}) {
+  const capacity = rootCapacity(input.soil, input.crop.rootM);
+  const duration = dayDistance(input.planting, input.harvest) + 1;
+  if (capacity === null || !input.days.length || !Number.isFinite(duration) || duration <= 0 ||
+      !Number.isFinite(input.initialFraction) || input.initialFraction < 0 || input.initialFraction > 1 ||
+      ![input.rainEfficiency, input.irrigationEfficiency].every(x => Number.isFinite(x) && x >= 0 && x <= 1) ||
+      input.turns.some(t => !Number.isFinite(t.grossMm) || t.grossMm < 0)) return null;
+  let storage = capacity * input.initialFraction;
+  const rows: BalanceRow[] = [];
+  for (const [index, day] of input.days.entries()) {
+    if (!Number.isFinite(dayDistance(day.date, day.date)) || day.date > input.harvest ||
+        (index > 0 && dayDistance(input.days[index - 1].date, day.date) !== 1) ||
+        day.rain === null || day.et0 === null || !Number.isFinite(day.rain) || !Number.isFinite(day.et0) || day.rain < 0 || day.et0 < 0) return null;
+    const active=day.date>=input.planting;
+    const phase = active?cropProgress(dayDistance(input.planting, day.date), duration, input.crop.kc):{stage:'Antes de la siembra',kc:.25};
+    const demand = day.et0 * phase.kc;
+    const threshold = active?capacity * (1 - clamp(input.crop.p + .04 * (5 - demand), .1, .8)):0;
+    const rain = day.rain * input.rainEfficiency;
+    const irrigation = input.turns.filter(t => t.date === day.date).reduce((sum, t) => sum + t.grossMm * input.irrigationEfficiency, 0);
+    const before = storage;
+    const available = Math.min(capacity, storage + rain + irrigation);
+    const loss = Math.max(0, storage + rain + irrigation - capacity);
+    const actual = Math.min(available, demand * (threshold>0?Math.min(1, available / threshold):1));
+    storage = available - actual;
+    rows.push({date: day.date, stage: phase.stage, storageBeforeMm: before, storageMm: storage, capacityMm: capacity,
+      thresholdMm: threshold, rainMm: rain, irrigationMm: irrigation, lossMm: loss, potentialEtMm: demand,
+      actualEtMm: actual, stressed: storage + 1e-8 < threshold});
+  }
+  return { rows, stressDays: rows.filter(r => r.stressed).length, firstStress: rows.find(r => r.stressed)?.date ?? null,
+    demandMm: rows.reduce((s, r) => s + r.potentialEtMm, 0), excessMm: rows.reduce((s, r) => s + r.lossMm, 0),
+    rainMm: input.days.reduce((s, r) => s + r.rain!, 0) };
+}
+
 export type BalanceRow = {
   date: string;
   stage: string;
@@ -207,6 +245,7 @@ function evaluateRotation(input: BalanceInput, rotation: Rotation, irrigation: M
   let supplementalMm = 0;
   let coverageDays = 0;
   let frostDays = 0;
+  let frostComplete = seasons.every(s=>s.crop.frostC!==undefined);
   const series: BalanceRow[] = [];
 
   for (const day of input.days) {
@@ -243,20 +282,25 @@ function evaluateRotation(input: BalanceInput, rotation: Rotation, irrigation: M
 
     const stressed = Boolean(season) && stored + 1e-8 < threshold;
     if (phase.covered) coverageDays++;
+    if (season && day.tmin === null) frostComplete = false;
     if (season && day.tmin !== null && season.crop.frostC !== undefined && day.tmin <= season.crop.frostC) frostDays++;
     series.push({ date: day.date, stage: phase.stage, storageBeforeMm: before, storageMm: stored, capacityMm: max,
       thresholdMm: threshold, rainMm: rain, irrigationMm: water, lossMm: loss, potentialEtMm: demand, actualEtMm: actualEt, stressed });
   }
   if (frostDays > 0) reasons.push(`${frostDays} días alcanzan un umbral de frío de referencia en cultivo activo.`);
+  if (!frostComplete) reasons.push('La evaluación del frío está incompleta: falta un umbral validado o temperaturas mínimas. No significa ausencia de heladas.');
   const stressDays = series.filter((day) => day.stressed).length;
   return { ...base, status: reasons.length ? "conditional" : "viable", reasons, stressDays,
-    firstStress: series.find((day) => day.stressed) ?? null, supplementalMm, coverageDays, frostDays, series };
+    firstStress: series.find((day) => day.stressed) ?? null, supplementalMm, coverageDays, frostDays: frostComplete?frostDays:null, series };
 }
 
 export function preferred(results: Result[], priority: string): Result | undefined {
+  const diversity=(r:Result)=>new Set(r.rotation.seasons.map(s=>s.crop.family??s.crop.name)).size;
   return results.filter((entry) => entry.compatible && !entry.excluded && entry.stressDays !== null)
-    .sort((a, b) => Number(a.status !== "viable") - Number(b.status !== "viable") ||
+    .sort((a, b) =>
+      (priority === "Diversificar la producción" ? diversity(b)-diversity(a) : 0) ||
       (priority === "Usar menos agua" ? a.supplementalMm! - b.supplementalMm! || a.stressDays! - b.stressDays! :
         a.stressDays! - b.stressDays! || a.supplementalMm! - b.supplementalMm!) ||
+      Number(a.status !== "viable") - Number(b.status !== "viable") ||
       b.coverageDays! - a.coverageDays!)[0];
 }

@@ -5,7 +5,6 @@ import { ArrowRight, CircleDot, MapPinned } from "lucide-react";
 import { useState, type SubmitEvent } from "react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
-import { getReferenceCase, referenceCases } from "../territory/reference";
 import { coordinates, decimal, pilotCoordinates, type Coordinates, type Parcel } from "./draft";
 import { DraftActions, DraftForm, DraftHeader, Field, type DraftStatus } from "./draft-form";
 
@@ -17,17 +16,17 @@ const ParcelMap = dynamic(() => import("./parcel-map"), {
 export function ParcelForm({ explore = false }: { explore?: boolean }) {
   return (
     <div className={explore ? "pb-6" : "py-6 sm:py-9"}>
-      {!explore && <DraftHeader title="Mi parcela" description="Guarda la ubicación y los datos de tu parcela en este dispositivo." />}
-      <DraftForm>
-        {(draft, save, status, markEdited, account) => (
-          <ParcelFields parcel={draft?.parcel} explore={explore} account={account} save={(parcel) => save({ parcel })} status={status} markEdited={markEdited} />
+      {!explore && <DraftHeader title="Mis parcelas" description="Guarda la ubicación de tu parcela y vuelve para consultar su agua y sus cultivos." />}
+      <DraftForm showParcels={!explore}>
+        {(draft, save, status, markEdited, parcelId) => (
+          <ParcelFields parcel={draft?.parcel} explore={explore} parcelId={parcelId} save={(parcel) => save({ parcel })} status={status} markEdited={markEdited} />
         )}
       </DraftForm>
     </div>
   );
 }
 
-function ParcelFields({ parcel, explore, account, save, status, markEdited }: { parcel?: Parcel; explore: boolean; account: boolean; save: (parcel: Parcel) => Promise<void>; status: DraftStatus; markEdited: () => void }) {
+function ParcelFields({ parcel, explore, parcelId, save, status, markEdited }: { parcel?: Parcel; explore: boolean; parcelId?: string; save: (parcel: Parcel) => Promise<void>; status: DraftStatus; markEdited: () => void }) {
   const initial = parcel ?? (explore ? null : pilotCoordinates);
   const [latitude, setLatitude] = useState(String(initial?.latitude ?? ""));
   const [longitude, setLongitude] = useState(String(initial?.longitude ?? ""));
@@ -39,13 +38,13 @@ function ParcelFields({ parcel, explore, account, save, status, markEdited }: { 
   const [pointChosen, setPointChosen] = useState(!explore);
   const selected = coordinates(latitude, longitude);
   const mapPoint = pointChosen ? selected : null;
-  const reference = selected ? getReferenceCase(selected.latitude, selected.longitude) : null;
   const params = new URLSearchParams(mapOpen ? view : "");
   if (selected) {
     params.set("lat", String(selected.latitude));
     params.set("lon", String(selected.longitude));
     if (outline) params.set("tipo", "parcela");
     if (outline && decimal(area) > 0) params.set("area", String(decimal(area)));
+    if (parcelId) params.set("guardada", parcelId);
   }
   const savedTerritory = parcel && selected && parcel.latitude === selected.latitude &&
     parcel.longitude === selected.longitude ? parcel.territory : undefined;
@@ -123,15 +122,10 @@ function ParcelFields({ parcel, explore, account, save, status, markEdited }: { 
               </a>
             </Button>}
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2" aria-label="Casos de referencia" role="group">
-            {Object.entries(referenceCases).map(([key, option]) => (
-              <Button key={key} type="button" variant="secondary" aria-pressed={Boolean(mapPoint && reference === key)} className="aria-pressed:border-action aria-pressed:bg-leaf" onClick={() => replacePoint(option)}>{option.label}</Button>
-            ))}
-          </div>
         </section>
-        <section aria-labelledby="parcel-fields" className="panel">
+        {!explore && <section aria-labelledby="parcel-fields" className="panel">
           <h2 id="parcel-fields" className="text-xl font-bold">Datos de la parcela</h2>
-          <p className="mt-1 text-sm text-muted">{account ? "Puedes editar los datos y guardar la parcela en tu cuenta." : "Puedes editar los datos y guardar la parcela en este dispositivo."}</p>
+          <p className="mt-1 text-sm text-muted">{parcelId ? "Puedes editar los datos y guardar la parcela en tu cuenta." : "Puedes editar los datos y guardar la parcela en este dispositivo."}</p>
           <form className="mt-4" onSubmit={submit} onChange={() => { setError(""); markEdited(); }}>
             <fieldset disabled={status === "saving"} className="grid gap-4">
               <Field label="Nombre de la parcela (opcional)"><Input name="name" maxLength={100} defaultValue={parcel?.name ?? ""} /></Field>
@@ -144,7 +138,7 @@ function ParcelFields({ parcel, explore, account, save, status, markEdited }: { 
             {error && <p role="alert" className="mt-3 text-sm text-red-800">{error}</p>}
             <DraftActions status={status} next={{ href: "/la-maica/mi-cultivo-y-mi-agua", label: "Ir a cultivo y agua" }} />
           </form>
-        </section>
+        </section>}
       </div>
     </div>
   );

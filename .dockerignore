@@ -11,3 +11,4 @@
 public/sw.js
 !scripts/
 !scripts/build-service-worker.mjs
+!scripts/copiar-worker.mjs

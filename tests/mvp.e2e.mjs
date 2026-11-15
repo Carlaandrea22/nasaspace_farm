@@ -14,7 +14,18 @@ async function openReport(page, name = "Consultar ubicación") {
   return report;
 }
 
-test("el menú compacto se abre desde el borde sin desplazar la página", async () => {
+async function selectedCoordinates(page) {
+  const href = await page.getByRole("link", { name: "Consultar ubicación", exact: true }).getAttribute("href");
+  const { searchParams } = new URL(href, origin);
+  return [Number(searchParams.get("lat")), Number(searchParams.get("lon"))];
+}
+
+async function selectReference(page, name) {
+  await page.getByRole("button", { name, exact: true }).click();
+  await page.getByRole("button", { name: "Marcar centro" }).click();
+}
+
+test("la portada muestra la marca Yaku", async () => {
   const browser = await chromium.launch(install ? { channel: install } : {});
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
@@ -24,26 +35,6 @@ test("el menú compacto se abre desde el borde sin desplazar la página", async 
     const brand = page.getByRole("link", { name: "Yaku, inicio" });
     await brand.getByText("Yaku", { exact: true }).waitFor();
     await brand.locator("img").evaluate((logo) => logo.decode());
-    const menu = page.getByRole("button", { name: "Abrir menú" });
-    const main = page.locator("main");
-    await page.getByRole("region", { name: "Mapa de Cochabamba" }).waitFor();
-    const closedLayout = await main.boundingBox();
-    assert.equal(await menu.innerText(), "");
-    assert.ok((await menu.boundingBox()).x <= 8);
-    await menu.click();
-    const drawer = page.getByRole("dialog", { name: "Menú" });
-    await drawer.waitFor();
-    assert.deepEqual(await main.boundingBox(), closedLayout);
-    const navigation = await drawer.getByRole("navigation").boundingBox();
-    assert.equal(navigation.x, 0);
-    assert.ok(navigation.width <= 240 && navigation.height <= 225);
-    assert.equal(await drawer.getByRole("link", { name: "Explorar" }).getAttribute("aria-current"), "page");
-    await page.keyboard.press("Escape");
-    await drawer.waitFor({ state: "hidden" });
-    assert.equal(await menu.evaluate((element) => element === document.activeElement), true);
-    await menu.click();
-    await page.mouse.click(600, 160);
-    await drawer.waitFor({ state: "hidden" });
   } finally {
     await browser.close();
   }
@@ -96,10 +87,40 @@ test("el mapa acerca con la rueda y vuelve a la vista límite de Cochabamba", as
       await page.mouse.up();
     }
     await page.getByRole("button", { name: "Marcar centro" }).click();
-    const latitude = Number(await page.getByLabel("Latitud").inputValue());
-    const longitude = Number(await page.getByLabel("Longitud").inputValue());
+    const [latitude, longitude] = await selectedCoordinates(page);
     assert.ok(latitude >= -17.59 && latitude <= -17.23);
     assert.ok(longitude >= -66.31 && longitude <= -66.01);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("el mapa conserva la ubicación y los accesos a Tirani y La Maica", async () => {
+  const browser = await chromium.launch(install ? { channel: install } : {});
+  try {
+    const context = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      reducedMotion: "reduce",
+      permissions: ["geolocation"],
+      geolocation: { latitude: -17.39, longitude: -66.16, accuracy: 25 },
+    });
+    const page = await context.newPage();
+    page.setDefaultTimeout(8000);
+    await page.goto(origin);
+    const district = page.getByRole("combobox", { name: "Selecciona tu distrito" });
+    await district.locator('option[value="13"]').waitFor({ state: "attached" });
+    assert.equal(await page.getByRole("combobox", { name: "Buscar dirección o lugar" }).count(), 0);
+    await page.getByRole("button", { name: "Tirani", exact: true }).click();
+    assert.equal(await district.inputValue(), "13");
+    await page.getByRole("button", { name: "La Maica", exact: true }).click();
+    assert.equal(await district.inputValue(), "9");
+    await page.getByRole("button", { name: "Usar mi ubicación" }).click();
+    await page.getByText(/El punto azul indica tu ubicación aproximada/).waitFor();
+    assert.equal(await page.getByRole("link", { name: "Consultar ubicación" }).count(), 0);
+    await page.getByRole("button", { name: "Marcar centro" }).click();
+    const [latitude, longitude] = await selectedCoordinates(page);
+    assert.ok(Math.abs(latitude + 17.39) < 0.001);
+    assert.ok(Math.abs(longitude + 66.16) < 0.001);
   } finally {
     await browser.close();
   }
@@ -119,12 +140,7 @@ test("el invitado guarda su parcela, compara escenarios y reabre el MVP sin red"
     };
     await page.goto(origin);
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
-    const openMenu = page.getByRole("button", { name: "Abrir menú" });
     const nav = page.getByRole("navigation", { name: "Navegación principal" });
-    const navigate = async (label) => {
-      await openMenu.click();
-      await nav.getByRole("link", { name: label }).click();
-    };
     await page.getByRole("heading", { name: "Tu parcela, a la vista." }).waitFor();
     await page.getByRole("heading", { name: "Encuentra tu parcela" }).waitFor();
     const carousel = page.getByRole("region", { name: "Escenas de Yaku" });
@@ -134,23 +150,21 @@ test("el invitado guarda su parcela, compara escenarios y reabre el MVP sin red"
     await carousel.getByRole("button", { name: "Consulta el historial climático" }).click();
     await carousel.getByRole("button", { name: "Siguiente escena" }).press("ArrowRight");
     assert.equal(await carousel.getByRole("button", { name: "Encuentra tu parcela" }).getAttribute("aria-current"), "true");
-    await openMenu.click();
+    assert.equal(await nav.getByRole("link").count(), 1);
     assert.equal(await nav.getByRole("link", { name: "Explorar" }).getAttribute("aria-current"), "page");
-    await page.getByRole("button", { name: "Cerrar menú" }).click();
     const map = page.getByRole("region", { name: "Mapa de Cochabamba" });
     await map.locator(".leaflet-districts-pane path").first().waitFor({ state: "attached" });
     assert.equal(await page.getByRole("combobox", { name: "Buscar dirección o lugar" }).count(), 0);
-    assert.equal(await page.getByRole("button", { name: "Usar mi ubicación" }).count(), 0);
+    assert.ok(await page.getByRole("button", { name: "Usar mi ubicación" }).isVisible());
     const district = page.getByRole("combobox", { name: "Selecciona tu distrito" });
     await district.selectOption("9");
     assert.equal(await map.getByRole("button", { name: "Alejar mapa" }).getAttribute("aria-disabled"), "false");
     await map.click({ position: { x: 74, y: 96 } });
     await page.getByText("Punto seleccionado", { exact: true }).waitFor();
-    const clickedLatitude = await page.getByLabel("Latitud").inputValue();
+    const clickedCoordinates = await selectedCoordinates(page);
     await page.getByRole("button", { name: "Marcar centro" }).click();
-    assert.notEqual(await page.getByLabel("Latitud").inputValue(), clickedLatitude);
-    await page.getByRole("button", { name: "La Maica · D9 / Itocta" }).click();
-    await map.locator(".leaflet-overlay-pane path").first().waitFor({ state: "attached" });
+    assert.notDeepEqual(await selectedCoordinates(page), clickedCoordinates);
+    await page.goto(origin + "/la-maica/mi-parcela");
     await page.getByLabel("Nombre de la parcela (opcional)").fill("Parcela de prueba");
     await page.getByLabel("Superficie (ha, opcional)").fill("1,5");
     await save();
@@ -162,6 +176,7 @@ test("el invitado guarda su parcela, compara escenarios y reabre el MVP sin red"
     await page.getByLabel("Duración (min)").fill("80");
     await save();
     await page.getByRole("link", { name: "Ir a la comparación" }).click();
+    await page.getByRole("button", { name: "Demo La Maica" }).click();
     await page.getByRole("heading", { name: "Matriz de decisión" }).waitFor();
     const cards = page.getByRole("article", { name: /^Opción / });
     assert.equal(await cards.count(), 3);
@@ -193,9 +208,9 @@ test("el invitado guarda su parcela, compara escenarios y reabre el MVP sin red"
     await cards.filter({ hasText: "Opción C · Preferida" }).waitFor();
 
     await context.setOffline(true);
-    await page.reload();
+    await page.goto(origin + "/la-maica/comparar#demo");
     await page.getByRole("heading", { name: "Matriz de decisión" }).waitFor();
-    await navigate("Explorar");
+    await nav.getByRole("link", { name: "Explorar" }).click();
     await carousel.getByRole("button", { name: "Anticipa el clima" }).click();
     await carousel.locator('[data-active="true"] img').evaluate((image) => image.decode());
     await map.locator(".leaflet-districts-pane path").first().waitFor({ state: "attached" });
@@ -209,34 +224,36 @@ test("el invitado guarda su parcela, compara escenarios y reabre el MVP sin red"
     await page.locator("img.brand-mark").evaluate((image) => image.decode());
     assert.equal(await page.evaluate(async () => Boolean(await caches.match("/images/carla-valle.webp"))), true);
     assert.equal(await page.evaluate(async () => Boolean(await caches.match("/images/parcela-tractor.webp"))), true);
-    await navigate("Mis parcelas");
+    await page.goto(origin + "/la-maica/mi-parcela");
     assert.equal(await page.getByLabel("Nombre de la parcela (opcional)").inputValue(), "Parcela de prueba");
     assert.equal(await page.getByLabel("Superficie (ha, opcional)").inputValue(), "1.5");
     assert.equal(await page.getByRole("region", { name: "Mapa de La Maica" }).count(), 0);
     await page.getByRole("link", { name: "Ir a cultivo y agua" }).click();
     assert.equal(await page.getByLabel("Caudal (L/s)").inputValue(), "5");
-    await navigate("Mis parcelas");
-    await page.getByRole("button", { name: "Tirani · D13 / Tunari" }).click();
+    await page.goto(origin + "/la-maica/mi-parcela");
+    await page.getByLabel("Latitud").fill("-17.34161");
+    await page.getByLabel("Longitud").fill("-66.15458");
     const offlineReport = await openReport(page);
+    await offlineReport.getByText("Ver clima y cultivos de este lugar", { exact: true }).click();
     await offlineReport.locator("summary").filter({ hasText: "Contexto territorial" }).click();
     await offlineReport.getByText("Referencia del piloto:", { exact: false }).waitFor();
     await offlineReport.getByText("Las capas municipales no están disponibles en este momento.").waitFor();
     await offlineReport.close();
     await save();
-    await navigate("Rotaciones");
+    await page.goto(origin + "/la-maica/comparar");
     await page.getByRole("heading", { name: /Tirani.*datos insuficientes/ }).waitFor();
     assert.equal(await cards.count(), 0);
-    await page.getByText("Incorpora suelo, clima histórico y alternativas agronómicas compatibles con esta ubicación.").waitFor();
+    await page.getByText("Confirma los datos de esta ubicación para comparar rotaciones compatibles.").waitFor();
     await page.getByRole("link", { name: "Completar cultivo y agua" }).click();
     assert.equal(await page.getByLabel("Caudal (L/s)").inputValue(), "");
     await page.getByLabel("Caudal (L/s)").fill("10");
     await save();
-    await navigate("Explorar");
-    await page.getByRole("link", { name: "Abrir simulación de riego" }).click();
+    await page.goto(origin + "/la-maica/comparar#demo");
     await page.getByRole("heading", { name: "Matriz de decisión" }).waitFor();
     assert.equal(await page.getByRole("button", { name: "Demo La Maica" }).getAttribute("aria-pressed"), "true");
-    await navigate("Mis parcelas");
-    await page.getByRole("button", { name: "La Maica · D9 / Itocta" }).click();
+    await page.goto(origin + "/la-maica/mi-parcela");
+    await page.getByLabel("Latitud").fill("-17.42442");
+    await page.getByLabel("Longitud").fill("-66.18272");
     await save();
     await page.getByRole("link", { name: "Ir a cultivo y agua" }).click();
     assert.equal(await page.getByLabel("Caudal (L/s)").inputValue(), "5");
@@ -311,7 +328,7 @@ test("la inspección se puede abrir y descargar con condiciones controladas", as
 test("el historial cambia con el punto y recupera la última consulta sin red", async () => {
   const browser = await chromium.launch(install ? { channel: install } : {});
   try {
-    const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
     const page = await context.newPage();
     page.setDefaultTimeout(9000);
     const queriedAt = "2026-11-28T16:00:00.000Z";
@@ -355,10 +372,11 @@ test("el historial cambia con el punto y recupera la última consulta sin red", 
     });
     await page.goto(origin);
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
-    await page.getByRole("button", { name: "La Maica · D9 / Itocta" }).click();
+    await selectReference(page, "La Maica");
     assert.deepEqual(consultations, []);
     const panel = await openReport(page);
     await panel.getByRole("heading", { name: "¿Qué puedes cultivar aquí?" }).waitFor();
+    await panel.getByText("Ver clima y cultivos de este lugar", { exact: true }).click();
     await panel.getByText("480 mm", { exact: true }).waitFor();
     await panel.locator("summary").filter({ hasText: "Contexto territorial" }).click();
     await panel.getByRole("region", { name: "Contexto territorial" }).getByText("D9 · Itocta", { exact: true }).waitFor();
@@ -389,15 +407,15 @@ test("el historial cambia con el punto y recupera la última consulta sin red", 
     await panel.getByRole("button", { name: "Imprimir o guardar PDF" }).click();
     assert.equal(await panel.locator("body").getAttribute("data-printed"), "true");
     await panel.close();
-    await page.getByRole("button", { name: "Tirani · D13 / Tunari" }).click();
+    await selectReference(page, "Tirani");
     const tirani = await openReport(page);
+    await tirani.getByText("Ver clima y cultivos de este lugar", { exact: true }).click();
     await tirani.getByText("515 mm", { exact: true }).waitFor();
     await tirani.locator("summary").filter({ hasText: "Contexto territorial" }).click();
     await tirani.getByRole("region", { name: "Contexto territorial" }).getByText("D13 · Tunari", { exact: true }).waitFor();
     assert.equal(await tirani.getByText("480 mm", { exact: true }).count(), 0);
+    const tiraniUrl = tirani.url();
     await tirani.close();
-    await page.getByRole("button", { name: "Guardar borrador" }).click();
-    await page.getByText("Guardado en este dispositivo").waitFor();
     await context.unrouteAll();
     await context.setOffline(true);
     await page.reload();
@@ -420,7 +438,9 @@ test("el historial cambia con el punto y recupera la última consulta sin red", 
     await page.getByRole("button", { name: "Ver todos los distritos" }).click();
     assert.equal(await zoomOut.getAttribute("aria-disabled"), "true");
     assert.equal(await page.getByRole("link", { name: "Consultar ubicación", exact: true }).count(), 0);
-    const cached = await openReport(page, "Abrir parcela guardada");
+    const cached = await context.newPage();
+    await cached.goto(tiraniUrl);
+    await cached.getByText("Ver clima y cultivos de este lugar", { exact: true }).click();
     await cached.getByText("515 mm", { exact: true }).waitFor();
     await cached.getByText(/NASA POWER.*Copia guardada/i).waitFor();
   } finally {

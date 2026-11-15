@@ -15,6 +15,23 @@ const alternateOrigin = localURL.hostname === "localhost" || localURL.hostname =
 export const trustedOrigins = [localURL.origin, ...(alternateOrigin ? [alternateOrigin] : [])];
 
 async function configureAuth() {
+  // Route handlers can initialize independently. PostgreSQL serializes migrations and demo setup.
+  const connection = await pool.connect();
+  try {
+    await connection.query("BEGIN");
+    await connection.query("SELECT pg_advisory_xact_lock(81463219)");
+    const auth = await initializeAuth();
+    await connection.query("COMMIT");
+    return auth;
+  } catch (error) {
+    await connection.query("ROLLBACK");
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+async function initializeAuth() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS field_shift_settings (
       key text PRIMARY KEY,
@@ -33,7 +50,7 @@ async function configureAuth() {
     baseURL,
     trustedOrigins,
     secret,
-    emailAndPassword: { enabled: true, disableSignUp: true },
+    emailAndPassword: { enabled: true },
     plugins: [username()],
   };
   const auth = betterAuth(options);
@@ -42,10 +59,24 @@ async function configureAuth() {
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS field_shift_drafts (
-      user_id text PRIMARY KEY REFERENCES "user"(id) ON DELETE CASCADE,
+      user_id text NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+      parcel_id text NOT NULL DEFAULT 'default',
       draft jsonb NOT NULL,
-      updated_at timestamptz NOT NULL DEFAULT now()
-    )
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (user_id, parcel_id)
+    );
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema() AND table_name = 'field_shift_drafts' AND column_name = 'parcel_id'
+      ) THEN
+        ALTER TABLE field_shift_drafts
+          ADD COLUMN parcel_id text NOT NULL DEFAULT 'default',
+          DROP CONSTRAINT field_shift_drafts_pkey,
+          ADD PRIMARY KEY (user_id, parcel_id);
+      END IF;
+    END $$;
   `);
 
   const password = process.env.FIELD_SHIFT_DEMO_PASSWORD;

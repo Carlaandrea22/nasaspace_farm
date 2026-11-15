@@ -1,4 +1,5 @@
 import earlyData from "../data/imerg-early.json";
+import { sameImergCell } from '../domain/water-balance/source-parsers';
 import { forecastHorizonDays, timeZone, toForecast } from "../features/operations/model";
 
 type Point = { latitude: number; longitude: number };
@@ -6,12 +7,8 @@ type Point = { latitude: number; longitude: number };
 function relevantEarly(point: Point) {
   const { location, days } = earlyData as { location?: Point & { radiusKm: number }; days?: Record<string, number | null> };
   if (!location || !days) return {};
-  const radians = Math.PI / 180;
-  const lat = (location.latitude - point.latitude) * radians;
-  const lon = (location.longitude - point.longitude) * radians;
-  const haversine = Math.sin(lat / 2) ** 2
-    + Math.cos(point.latitude * radians) * Math.cos(location.latitude * radians) * Math.sin(lon / 2) ** 2;
-  return 6371 * 2 * Math.asin(Math.sqrt(Math.min(haversine, 1))) <= location.radiusKm ? days : {};
+  // The imported HDF5 extraction identifies this actual 0.1° pixel, not a radius.
+  return sameImergCell(point.latitude, point.longitude, -17.45, -66.15) ? days : {};
 }
 
 export async function readWeather(point: Point) {
@@ -21,7 +18,7 @@ export async function readWeather(point: Point) {
     longitude: String(point.longitude),
     daily: "precipitation_sum,et0_fao_evapotranspiration,temperature_2m_min,temperature_2m_max,relative_humidity_2m_mean",
     timezone: timeZone,
-    past_days: "3",
+    past_days: "7",
     forecast_days: String(forecastHorizonDays),
   }).toString();
   const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(9000) });

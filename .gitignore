@@ -11,3 +11,5 @@
 /AGENTS.md
 __pycache__/
 /public/maplibre-worker.mjs
+/.data-venv/
+/.data-cache/

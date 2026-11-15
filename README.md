@@ -2,7 +2,7 @@
 
 PWA para pequeños productores y regantes del municipio de Cochabamba. Compara rotaciones con los mismos datos de clima y suelo, ensaya un retraso en el riego y reúne lo que conviene confirmar antes del siguiente turno. Proyecto de [NASA Space Apps Challenge 2026](https://www.spaceappschallenge.org/2026/challenges/adapting-farms-with-nasa-data/) con [enfoque de Cochabamba](https://www.spaceappschallenge-cbba.com/index.php).
 
-**Estado.** El MVP local de Yaku integra la interfaz diseñada por Carla y el modelo del reto Field Shift. La Maica, D9 / Itocta, tiene un caso ilustrativo de punta a punta. El explorador calcula aptitud climática por punto con NASA POWER y el catálogo EcoCrop de Zama. Tirani, D13 / Tunari, puede consultar esa aptitud y requiere su propio perfil agrícola para comparar rotaciones. Los borradores se guardan en el navegador sin cuenta.
+**Estado.** MVP local de **Yaku**, con la interfaz diseñada por Carla y el modelo de Field Shift. El informe público permite consultar agua y comparar tres rotaciones para la ubicación seleccionada, sin cuenta, con NASA POWER, SMAP, IMERG, SoilGrids, Open-Meteo y las tres capas GAMC. La disponibilidad, resolución y fecha de cada fuente se muestran; los datos faltantes no se sustituyen por mediciones de otra parcela. Consulta el [entregable local, cobertura, actualización y pruebas](docs/entregable-local.md). El simulador histórico de La Maica sigue disponible como referencia.
 
 - [Operación local](#operación-local)
 - [Guion de demo](#guion-de-demo)
@@ -20,9 +20,9 @@ docker compose up --build --detach --wait
 docker compose ps
 ```
 
-Abre [localhost:3000](http://localhost:3000). **Explorar** abre el mapa de Cochabamba. **Mis parcelas** recupera el borrador del dispositivo y da acceso a **Mi cultivo y mi agua**. **Rotaciones** abre el simulador y **Agua** abre el próximo turno. El botón **Piloto La Maica** abre los detalles y accesos del caso piloto. El puerto se puede cambiar con `FIELD_SHIFT_PORT=3001 docker compose up --build --detach --wait`. Consulta registros con `docker compose logs app` y detén el servicio con `docker compose stop`.
+Con Docker Desktop abierto, entra a [localhost:3000](http://localhost:3000). **Explorar** abre el mapa de Cochabamba. Después de iniciar sesión, **Mis parcelas** muestra tus parcelas guardadas y da acceso a **Mi cultivo y mi agua**. **Rotaciones** abre el simulador y **Agua** abre el próximo turno. Si el puerto está ocupado, configura `FIELD_SHIFT_PORT=3001` en `.env`, ejecuta de nuevo el comando de arranque y abre [localhost:3001](http://localhost:3001). Consulta registros con `docker compose logs app db` y detén el servicio con `docker compose stop`.
 
-La PWA se puede instalar en un navegador compatible. Después de que el service worker aparezca activo, las vistas, las imágenes de portada, la comparación, los polígonos distritales, los recortes de La Maica y Tirani y los borradores funcionan sin señal. La imagen satelital y las consultas nuevas requieren conexión. **Selecciona tu distrito** acerca el mapa al distrito elegido. Desde ahí puedes marcar un punto o dibujar el contorno de la parcela. **Consultar esta parcela** abre los resultados y solicita en paralelo el historial de NASA POWER y las capas del Gobierno Autónomo Municipal de Cochabamba (GAMC). **Guardar borrador** conserva el punto y los resultados territoriales disponibles. El pronóstico conserva una copia fechada por ubicación después de una consulta y suspende la ficha de inspección cuando opera con esa copia. Docker publica el puerto en loopback. Para probar instalación en un teléfono físico, usa un acceso HTTPS local con certificado reconocido por el dispositivo.
+La PWA se puede instalar en un navegador compatible. Después de que el service worker aparezca activo, las vistas, las imágenes de portada, la comparación, los polígonos distritales, los recortes de La Maica y Tirani y los borradores funcionan sin señal. La imagen satelital y las consultas nuevas requieren conexión. **Selecciona tu distrito** acerca el mapa al distrito elegido. Desde ahí puedes marcar un punto o dibujar el contorno de la parcela. **Usar mi ubicación** muestra tu posición aproximada con tu permiso. **Tirani** y **La Maica** acercan el mapa a los sitios de referencia. **Consultar esta parcela** abre los resultados y solicita en paralelo el historial de NASA POWER y las capas del Gobierno Autónomo Municipal de Cochabamba (GAMC). **Guardar borrador** conserva el punto y los resultados territoriales disponibles. El pronóstico conserva una copia fechada por ubicación después de una consulta y suspende la ficha de inspección cuando opera con esa copia. Docker publica el puerto en loopback. Para probar instalación en un teléfono físico, usa un acceso HTTPS local con certificado reconocido por el dispositivo.
 
 El proyecto de Compose se llama `field-shift`. Levanta la app y un PostgreSQL interno con el volumen `field-shift-db`. Usa `docker compose up --build --detach --wait` desde este repositorio para actualizar la misma instancia.
 
@@ -30,9 +30,11 @@ La portada de **Explorar** incluye cinco escenas originales sobre parcela, riego
 
 El encabezado **Encuentra tu parcela** conserva el tractor a la derecha. Desde 768 px, el valle y los surcos se extienden hacia el centro y se funden con el fondo verde claro. Las dos ilustraciones se precargan para uso sin conexión. En pantallas más estrechas, el fondo verde claro da espacio al título y al texto.
 
-**Cuenta local de prueba.** Abre **Iniciar sesión** y entra con el ID `prueba` y la contraseña `prueba123`. En la cabecera aparece **Luis**. Pulsa el nombre para abrir el menú y cerrar sesión. Al guardar con sesión, la parcela, los cultivos y el turno se asocian a la cuenta en PostgreSQL. Los borradores ya guardados como invitado pueden copiarse a una cuenta vacía desde el botón que aparece encima del formulario. En modo invitado el guardado de este dispositivo sigue funcionando sin conexión. Iniciar sesión y guardar en la cuenta requieren conexión con el servidor local. La cuenta de prueba se crea al acceder por primera vez y está pensada para este entorno Docker de demostración.
+**Tu cuenta.** Abre **Iniciar sesión → Crear cuenta** y escribe tu nombre, correo y una contraseña de al menos ocho caracteres. La sesión comienza al crear la cuenta. Para volver a entrar usa tu correo y contraseña. Pulsa tu nombre para cerrar sesión. El registro local no envía correos de verificación ni de recuperación de contraseña.
 
-Para probar el acceso, ejecuta `docker compose up --build --detach --wait` desde la raíz y abre `http://localhost:3000`. `docker compose ps` debe mostrar `app` y `db` saludables. Las credenciales de prueba se configuran en Compose y el usuario se crea en el volumen de PostgreSQL. Si el volumen ya contiene la cuenta, se respeta la contraseña configurada al crearla. El proyecto `prototipo/` es una vista independiente.
+En **Mis parcelas**, marca la ubicación o dibuja el contorno, escribe un nombre para reconocer la parcela y pulsa **Guardar borrador**. Usa **Nueva parcela** para agregar otra y el selector **Parcelas guardadas** para reabrir cualquiera. **Consultar esta parcela** o **Consultar ubicación** abre el informe. **Ir a cultivo y agua** permite guardar el cultivo y el turno de la parcela seleccionada. Los datos de la cuenta quedan en el volumen de PostgreSQL y se recuperan al volver a iniciar sesión en esta instalación. Una cuenta vacía puede copiar un borrador de invitado guardado en este navegador.
+
+**Cuenta local de prueba.** Entra con el ID `prueba` y la contraseña inicial `prueba123`. En la cabecera aparece **Luis**. Si el volumen ya contiene esa cuenta, se conserva la contraseña con la que se creó. El modo invitado permite guardar un borrador en el dispositivo incluso sin conexión. Las cuentas requieren conexión al servidor local.
 
 Para desarrollar y ejecutar las pruebas en la máquina, usa Node.js 24 y Python 3.11+.
 
@@ -48,7 +50,7 @@ npm run test:e2e
 
 Las pruebas de navegador se ejecutan con Docker en marcha y se pueden dirigir a otro puerto con `FIELD_SHIFT_TEST_URL`. Con Chrome ya instalado, `PLAYWRIGHT_CHROMIUM_CHANNEL=chrome npm run test:e2e` usa ese navegador.
 
-La prueba de cuenta se ejecuta con `FIELD_SHIFT_TEST_URL=http://localhost:3107 node --test tests/account.e2e.mjs` en una instancia de Docker de prueba con una base vacía. Guarda borradores de ejemplo y los recupera en una segunda sesión.
+Las pruebas `tests/account.e2e.mjs` y `tests/account-registration.e2e.mjs` usan `FIELD_SHIFT_TEST_URL` y una instancia de Docker de prueba con una base vacía. Cubren la cuenta de Luis, el registro, el acceso desde otro navegador y la recuperación de varias parcelas.
 
 ## Guion de demo
 

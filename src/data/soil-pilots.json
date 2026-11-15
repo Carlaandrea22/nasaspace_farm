@@ -1,0 +1,56 @@
+{
+  "samples": [
+    {
+      "point": {
+        "name": "Tirani",
+        "latitude": -17.34161,
+        "longitude": -66.15458
+      },
+      "profile": [
+        {
+          "top": 0,
+          "bottom": 5,
+          "fc": 0.298,
+          "wp": 0.151,
+          "sand": 40.9,
+          "clay": 30.1
+        },
+        {
+          "top": 5,
+          "bottom": 15,
+          "fc": 0.297,
+          "wp": 0.148,
+          "sand": 40.7,
+          "clay": 29.5
+        },
+        {
+          "top": 15,
+          "bottom": 30,
+          "fc": 0.306,
+          "wp": 0.151,
+          "sand": 39.5,
+          "clay": 31
+        },
+        {
+          "top": 30,
+          "bottom": 60,
+          "fc": 0.304,
+          "wp": 0.165,
+          "sand": 38.9,
+          "clay": 29.9
+        },
+        {
+          "top": 60,
+          "bottom": 100,
+          "fc": 0.302,
+          "wp": 0.176,
+          "sand": 35.6,
+          "clay": 34
+        }
+      ],
+      "url": "https://rest.isric.org/soilgrids/v2.0/properties/query?lat=-17.34161&lon=-66.15458&property=wv0033&property=wv1500&property=sand&property=clay&depth=0-5cm&depth=5-15cm&depth=15-30cm&depth=30-60cm&depth=60-100cm&value=mean",
+      "queriedAt": "2026-11-15T11:45:09.137Z",
+      "source": "SoilGrids · ISRIC · extracción verificada de 250 m"
+    }
+  ]
+}

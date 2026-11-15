@@ -33,11 +33,11 @@ export function Comparison() {
   );
 }
 
-function ComparisonContent({ draft }: { draft?: PilotDraft }) {
+export function ComparisonContent({ draft, consultation = false }: { draft?: PilotDraft; consultation?: boolean }) {
   const reference = draft?.parcel && getReferenceCase(draft.parcel.latitude, draft.parcel.longitude);
-  const [demo, setDemo] = useState(() =>
+  const [demo, setDemo] = useState(() => !consultation && (
     (typeof window !== "undefined" && window.location.hash === "#demo") ||
-    !draft?.parcel || (reference === "la-maica" && assessDraft(draft).gaps.length > 0),
+    !draft?.parcel || (reference === "la-maica" && assessDraft(draft).gaps.length > 0)),
   );
   const [delay, setDelay] = useState<0 | 5>(0);
   const [volume, setVolume] = useState(String(demoVolume));
@@ -49,19 +49,19 @@ function ComparisonContent({ draft }: { draft?: PilotDraft }) {
 
   return (
     <>
-      <div className="mb-5 flex flex-wrap items-center gap-2" role="group" aria-label="Datos de la comparación">
+      {!consultation && <div className="mb-5 flex flex-wrap items-center gap-2" role="group" aria-label="Datos de la comparación">
         <Button aria-pressed={!demo} variant={demo ? "secondary" : "default"} onClick={() => setDemo(false)}>Mi parcela</Button>
         <Button aria-pressed={demo} variant={demo ? "default" : "secondary"} onClick={() => setDemo(true)}>Demo La Maica</Button>
-      </div>
+      </div>}
       {!demo && assessment.gaps.length > 0 && (
         <Alert role="note" className="max-w-3xl">
           <AlertTitle>{assessment.zone} · datos insuficientes</AlertTitle>
           <AlertDescription>Confirma los datos de esta ubicación para comparar rotaciones compatibles.</AlertDescription>
           <ul className="list-disc space-y-2 py-3 pl-5 text-sm">{assessment.gaps.map((gap) => <li key={gap}>{gap}</li>)}</ul>
-          <div className="flex flex-wrap gap-3">
+          {!consultation && <div className="flex flex-wrap gap-3">
             <Button asChild variant="secondary"><a href="/la-maica/mi-parcela">Revisar la parcela</a></Button>
             <Button asChild variant="secondary"><a href="/la-maica/mi-cultivo-y-mi-agua">Completar cultivo y agua</a></Button>
-          </div>
+          </div>}
         </Alert>
       )}
       {demo && <Alert role="note" className="mb-6">

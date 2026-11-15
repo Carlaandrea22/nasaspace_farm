@@ -25,8 +25,7 @@ test("cuenta de prueba guarda y recupera un borrador sin mezclar el modo invitad
     assert.match(await dialog.evaluate((element) => getComputedStyle(element, "::backdrop").backdropFilter), /blur/);
     await dialog.getByRole("button", { name: "Continuar como invitado" }).click();
     await dialog.waitFor({ state: "hidden" });
-    await page.getByRole("button", { name: "Abrir menú" }).click();
-    await page.getByRole("link", { name: "Mis parcelas" }).click();
+    await page.goto(origin + "/la-maica/mi-parcela");
     const name = (target) => target.getByLabel("Nombre de la parcela (opcional)");
     await name(page).fill("Parcela invitada");
     await page.getByRole("button", { name: "Guardar borrador" }).click();
@@ -96,8 +95,7 @@ test("cuenta de prueba guarda y recupera un borrador sin mezclar el modo invitad
     await account.click();
     await page.getByRole("button", { name: "Cerrar sesión" }).click();
     await page.getByRole("button", { name: "Iniciar sesión" }).waitFor();
-    await page.getByRole("button", { name: "Abrir menú" }).click();
-    await page.getByRole("link", { name: "Mis parcelas" }).click();
+    await page.goto(origin + "/la-maica/mi-parcela");
     assert.equal(await name(page).inputValue(), "Parcela invitada");
   } finally {
     await browser.close();

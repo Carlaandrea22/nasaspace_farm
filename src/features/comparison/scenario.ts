@@ -22,6 +22,8 @@ export const cropProfiles: Record<string, Crop & { duration: number; cold: strin
   [beans]: { name: beans, kc: [.5, 1.15, 1.1], rootM: .55, p: .45, minDays: 95, maxDays: 150, seedMonths: [2,3,4], use: "grain", duration: 106, cold: "Confirmar tolerancia en floración", drought: "Haba Cinteña requiere humedad sostenida según SEFO-SAM", seedRef: "120–130 kg/ha para Haba Cinteña (SEFO-SAM)" },
 };
 
+for (const profile of Object.values(cropProfiles)) profile.family = profile.name === beans ? "legume" : "cereal";
+
 export const scenarioSources = {
   power: "https://power.larc.nasa.gov/docs/services/api/temporal/daily/",
   imerg: "https://gpm.nasa.gov/data/directory",
